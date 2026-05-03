@@ -1,0 +1,10 @@
+# Linux collector image (ocb produces linux/amd64 by default in this Dockerfile).
+FROM otel/opentelemetry-collector-builder:0.129.0 AS build
+WORKDIR /build
+COPY collector/builder-config.yaml /build/collector/builder-config.yaml
+RUN mkdir -p dist && ocb --config=/build/collector/builder-config.yaml
+
+FROM gcr.io/distroless/base-debian12:nonroot
+COPY --from=build /build/dist/otel-custom/otel-custom /otel-custom
+USER nonroot:nonroot
+ENTRYPOINT ["/otel-custom"]

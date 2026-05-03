@@ -1,0 +1,50 @@
+# Example: forward OTLP to New Relic via OTLP/HTTP.
+# Copy to collector-config-nr.yaml, set NEW_RELIC_LICENSE_KEY, then run the custom collector.
+#
+# US OTLP endpoint (verify for your account/region):
+#   https://otlp.nr-data.net
+# EU: https://otlp.eu01.nr-data.net
+#
+# Auth: header "api-key" = New Relic ingest LICENSE key (from API keys UI).
+# HTTP 403 from otlp.nr-data.net usually means: wrong key type, wrong regional endpoint
+# (EU accounts need https://otlp.eu01.nr-data.net), or bad/expired key — see docs above.
+#
+# Exporters: New Relic OTLP only (no debug stdout). For local dumps use collector-config.yaml.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+exporters:
+  otlphttp/newrelic:
+    endpoint: https://otlp.nr-data.net
+    compression: gzip
+    headers:
+      api-key: ${env:NEW_RELIC_LICENSE_KEY}
+
+service:
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/newrelic]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/newrelic]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/newrelic]

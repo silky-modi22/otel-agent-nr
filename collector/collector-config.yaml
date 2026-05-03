@@ -1,0 +1,42 @@
+# Local development: OTLP in → batch → debug (stdout). No external backend.
+# HTTP-only on 4318 — avoids clashing with another app/collector on gRPC :4317.
+# To enable gRPC too, add under protocols: grpc: { endpoint: 0.0.0.0:4317 }
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  telemetry:
+    logs:
+      level: info
+    # Avoid binding localhost:8888 for internal Prometheus metrics (often conflicts
+    # when another collector or tool already uses that port).
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

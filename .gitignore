@@ -1,0 +1,12 @@
+# Local IDE / assistant artifacts (do not publish)
+.specstory/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+dist/otel-custom/
+
+# Local NR config may contain secrets if edited — keep example only in git
+collector/collector-config-nr.yaml

@@ -1,0 +1,17 @@
+# Run the custom collector (Linux/amd64 image). Build first:
+#   docker compose build collector
+# Then:
+#   docker compose up collector
+#
+# The Python agent runs on the host: `python -m agent --endpoint http://localhost:4318`
+
+services:
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    ports:
+      - "4318:4318"
+    volumes:
+      - ./collector/collector-config.yaml:/etc/otelcol/config.yaml:ro
+    command: ["--config=/etc/otelcol/config.yaml"]
