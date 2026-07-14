@@ -105,12 +105,15 @@ def fetch_summary(repo_root: Path) -> dict[str, Any]:
         "LIMIT 15 "
         "FORMAT TabSeparated",
     )
+    # SpanAttributes is Map(String, String); LIKE can't run on a Map directly,
+    # so search across its keys and values with arrayExists instead.
     github_like = run_query(
         repo_root,
         "SELECT count() FROM otel.otel_traces "
         "WHERE ServiceName = 'otel-ai-ingest' "
         "OR SpanName LIKE '%github%' "
-        "OR SpanAttributes LIKE '%github%' "
+        "OR arrayExists(x -> x LIKE '%github%', "
+        "arrayConcat(mapKeys(SpanAttributes), mapValues(SpanAttributes))) "
         "FORMAT TabSeparated",
     )
     latest = run_query(
