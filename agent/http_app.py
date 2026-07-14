@@ -30,6 +30,11 @@ from .process_manager import ProcessManager
 MAX_BODY_BYTES = 256_000
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = REPO_ROOT / "agent" / "static"
+# In-container URL the GitHub poller uses to reach this server. Overridable so
+# the value tracks the platform-provided $PORT in hosted deployments.
+INTERNAL_INGEST_URL = os.environ.get(
+    "INTERNAL_INGEST_URL", "http://127.0.0.1:8000/ingest"
+)
 DEFAULT_SAMPLE_INGEST_PAYLOAD: dict[str, Any] = {
     "source": "ui-sample",
     "message": "Checkout latency spiked in production",
@@ -343,7 +348,7 @@ def create_app() -> FastAPI:
                 env={
                     "GITHUB_POLL_ONCE": "1" if body.once else "0",
                     "GITHUB_POLL_INTERVAL_SEC": str(body.interval_sec),
-                    "INGEST_URL": "http://127.0.0.1:8000/ingest",
+                    "INGEST_URL": INTERNAL_INGEST_URL,
                 },
             )
         except RuntimeError as exc:
@@ -434,7 +439,7 @@ def create_app() -> FastAPI:
                 env={
                     "GITHUB_POLL_ONCE": "1",
                     "GITHUB_POLL_INTERVAL_SEC": "30",
-                    "INGEST_URL": "http://127.0.0.1:8000/ingest",
+                    "INGEST_URL": INTERNAL_INGEST_URL,
                     "GITHUB_REPO": github_repo,
                 },
             )

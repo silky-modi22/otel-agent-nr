@@ -2,3 +2,16 @@
 dist
 .git
 **/__pycache__
+
+# Secrets are provided via platform environment variables, never baked in.
+.clickhouse_endpoint
+.clickhouse_user
+.clickhouse_password
+.new_relic_license_key
+.gemini_api_key
+.github_token
+
+# Runtime collector configs are generated from .example by docker-entrypoint.sh.
+collector/collector-config-clickhouse.yaml
+collector/collector-config-dual.yaml
+collector/collector-config-nr.yaml
