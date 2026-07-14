@@ -574,17 +574,20 @@
           <div class="guide-step">
             <span class="guide-num">4</span>
             <p class="guide-text">
-              <strong>GitHub live traffic to ClickHouse</strong> — start collector
-              in <strong>ClickHouse</strong> or <strong>NR + ClickHouse</strong> mode,
-              then click <strong>Run GitHub to ClickHouse test</strong>. Refresh the
-              ClickHouse tab to verify rows in <code>otel.otel_traces</code>.
+              <strong>GitHub to ClickHouse</strong> — click
+              <strong>Run GitHub to ClickHouse test</strong> for a one-shot run,
+              or <strong>Start live stream</strong> to keep polling your repo every
+              30s so new pushes/PRs/issues flow into ClickHouse automatically. Both
+              auto-start the ClickHouse collector. Refresh the ClickHouse tab to
+              verify rows in <code>otel.otel_traces</code>; use
+              <strong>Stop live stream</strong> to end it.
             </p>
           </div>
           <div class="guide-step">
             <span class="guide-num">5</span>
             <p class="guide-text">
               <strong>Other pipelines</strong> — synthetic agent, AI ingest sample,
-              or continuous GitHub poll. Watch output in the panel at the bottom.
+              or manual collector modes. Watch output in the panel at the bottom.
             </p>
           </div>
         </div>
@@ -596,8 +599,8 @@
         <div class="step">
           <div class="step-head">
             <span class="step-num">A</span>
-            <span class="step-title">GitHub to ClickHouse (full test)</span>
-            <span class="step-desc">One click: collector + GitHub poll + verify</span>
+            <span class="step-title">GitHub to ClickHouse</span>
+            <span class="step-desc">One-shot test or continuous live stream</span>
           </div>
           <div class="btn-row">
             <button
@@ -606,6 +609,20 @@
               type="button"
             >
               Run GitHub to ClickHouse test
+            </button>
+            <button
+              class="primary"
+              data-action="run-github-clickhouse-live"
+              type="button"
+            >
+              Start live stream
+            </button>
+            <button
+              class="ghost danger"
+              data-action="stop-github"
+              type="button"
+            >
+              Stop live stream
             </button>
             <button data-action="refresh-clickhouse" type="button">
               Refresh ClickHouse
@@ -1050,6 +1067,20 @@
             showResult(
               `Done. ClickHouse traces: ${traces} (GitHub-related: ${githubTraces}). See ClickHouse tab.`
             );
+          } else if (action === "run-github-clickhouse-live") {
+            showResult(
+              "Starting live stream (auto-starting ClickHouse collector + GitHub poll)..."
+            );
+            const data = await apiPost(
+              "/api/pipelines/github-clickhouse-live",
+              { interval_sec: 30 }
+            );
+            setActiveTab("github");
+            showResult(
+              `Live stream started for ${data.github_repo} — polling every ` +
+                `${data.interval_sec}s. New GitHub events flow to ClickHouse ` +
+                `automatically. Use "Stop live stream" to stop.`
+            );
           } else if (action === "run-github") {
             await apiPost("/api/pipelines/github-poll", {
               once: false,
@@ -1098,7 +1129,10 @@
               "(not loaded — start collector in New Relic mode, then refresh)";
             newRelicDataNode.dataset.source = "";
           }
-          if (action !== "run-github-clickhouse-test") {
+          if (
+            action !== "run-github-clickhouse-test" &&
+            action !== "run-github-clickhouse-live"
+          ) {
             showResult("Done.");
           }
         } catch (err) {

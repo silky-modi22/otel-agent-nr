@@ -463,6 +463,69 @@ def create_app() -> FastAPI:
             "clickhouse": clickhouse,
         }
 
+    @app.post("/api/pipelines/github-clickhouse-live")
+    async def api_github_clickhouse_live(
+        body: GitHubPollRequest,
+    ) -> dict[str, Any]:
+        """Auto-start the ClickHouse collector, then stream GitHub events to it continuously.
+
+        Unlike the one-shot test, this leaves the poller running on an interval so
+        new repo activity keeps flowing into ClickHouse until stopped.
+        """
+        manager: ProcessManager = app.state.process_manager
+        if resolve_api_key() is None:
+            raise HTTPException(
+                status_code=503,
+                detail="GEMINI_API_KEY is not configured.",
+            )
+        if not manager.clickhouse_settings_set():
+            raise HTTPException(
+                status_code=503,
+                detail="ClickHouse is not configured (.clickhouse_* files or env).",
+            )
+
+        try:
+            collector_info = await manager.ensure_collector_for_clickhouse()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        if collector_info.get("status") == "started":
+            deadline = time.time() + 45.0
+            while time.time() < deadline:
+                if manager.collector_listening():
+                    break
+                await asyncio.sleep(0.5)
+            if not manager.collector_listening():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Collector started but :4318 is not listening yet.",
+                )
+
+        github_repo = os.environ.get(
+            "GITHUB_REPO", "silky-modi22/otel-agent-nr"
+        ).strip()
+        try:
+            job = await manager.start_job(
+                name="github-poll-once",
+                command=(sys.executable, "examples/github_ingest/poller.py"),
+                env={
+                    "GITHUB_POLL_ONCE": "0",
+                    "GITHUB_POLL_INTERVAL_SEC": str(body.interval_sec),
+                    "INGEST_URL": INTERNAL_INGEST_URL,
+                    "GITHUB_REPO": github_repo,
+                },
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return {
+            "status": "streaming",
+            "collector": collector_info,
+            "github_repo": github_repo,
+            "interval_sec": body.interval_sec,
+            "job": job,
+        }
+
     @app.get("/api/newrelic/summary")
     async def api_newrelic_summary() -> dict[str, Any]:
         try:
