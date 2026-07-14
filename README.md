@@ -36,6 +36,8 @@ Optional: `./scripts/run-agent.sh --duration 60 --interval 0.4`
 
 **New Relic:** create `collector/collector-config-nr.yaml` from [`collector/collector-config-nr.yaml.example`](collector/collector-config-nr.yaml.example), set `export NEW_RELIC_LICENSE_KEY="..."`, then Terminal 1: [`./scripts/run-collector-nr.sh`](scripts/run-collector-nr.sh), Terminal 2: `./scripts/run-agent.sh`. (NR config exports **only** to New Relic — no **`debug`** spam in Terminal 1; verify in the NR UI.)
 
+**New Relic + ClickHouse (dual):** rebuild the collector once (`./scripts/build-collector.sh`), copy [`collector/collector-config-dual.yaml.example`](collector/collector-config-dual.yaml.example) → `collector-config-dual.yaml`, set `NEW_RELIC_LICENSE_KEY` and `CLICKHOUSE_ENDPOINT` / `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD`, then Terminal 1: [`./scripts/run-collector-dual.sh`](scripts/run-collector-dual.sh). Details: **[docs/clickhouse-collector-checklist.md](docs/clickhouse-collector-checklist.md)**.
+
 ### Same flow without helpers
 
 ```bash

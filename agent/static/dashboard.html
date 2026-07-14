@@ -574,8 +574,17 @@
           <div class="guide-step">
             <span class="guide-num">4</span>
             <p class="guide-text">
-              <strong>Run the pipeline below</strong> — start the collector,
-              then generate telemetry. Watch output in the panel at the bottom.
+              <strong>GitHub live traffic to ClickHouse</strong> — start collector
+              in <strong>ClickHouse</strong> or <strong>NR + ClickHouse</strong> mode,
+              then click <strong>Run GitHub to ClickHouse test</strong>. Refresh the
+              ClickHouse tab to verify rows in <code>otel.otel_traces</code>.
+            </p>
+          </div>
+          <div class="guide-step">
+            <span class="guide-num">5</span>
+            <p class="guide-text">
+              <strong>Other pipelines</strong> — synthetic agent, AI ingest sample,
+              or continuous GitHub poll. Watch output in the panel at the bottom.
             </p>
           </div>
         </div>
@@ -586,9 +595,29 @@
       <section class="pipeline">
         <div class="step">
           <div class="step-head">
+            <span class="step-num">A</span>
+            <span class="step-title">GitHub to ClickHouse (full test)</span>
+            <span class="step-desc">One click: collector + GitHub poll + verify</span>
+          </div>
+          <div class="btn-row">
+            <button
+              class="primary"
+              data-action="run-github-clickhouse-test"
+              type="button"
+            >
+              Run GitHub to ClickHouse test
+            </button>
+            <button data-action="refresh-clickhouse" type="button">
+              Refresh ClickHouse
+            </button>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-head">
             <span class="step-num">1</span>
             <span class="step-title">Start collector</span>
-            <span class="step-desc">Required before sending data</span>
+            <span class="step-desc">Use ClickHouse or NR + ClickHouse for GitHub traffic</span>
           </div>
           <div class="btn-row">
             <button
@@ -600,9 +629,15 @@
             </button>
             <button
               class="primary"
-              data-action="collector-start-local"
+              data-action="collector-start-clickhouse"
               type="button"
             >
+              ClickHouse
+            </button>
+            <button data-action="collector-start-dual" type="button">
+              NR + ClickHouse
+            </button>
+            <button data-action="collector-start-local" type="button">
               Local (debug)
             </button>
             <button data-action="collector-start-nr" type="button">
@@ -675,6 +710,7 @@
           </button>
           <button class="tab" data-tab="ingest" type="button">AI Ingest</button>
           <button class="tab" data-tab="github" type="button">GitHub</button>
+          <button class="tab" data-tab="clickhouse" type="button">ClickHouse</button>
           <button class="tab" data-tab="newrelic" type="button">
             New Relic
           </button>
@@ -690,6 +726,24 @@
         </div>
         <div class="log-pane" data-pane="github">
           <pre id="github-poll-logs">(no logs)</pre>
+        </div>
+        <div class="log-pane" data-pane="clickhouse">
+          <div
+            style="
+              display: flex;
+              justify-content: flex-end;
+              margin-bottom: 8px;
+            "
+          >
+            <button
+              class="ghost"
+              data-action="refresh-clickhouse"
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+          <pre id="clickhouse-data">(not loaded - run GitHub to ClickHouse test or refresh)</pre>
         </div>
         <div class="log-pane" data-pane="newrelic">
           <div
@@ -725,6 +779,7 @@
       const collectorLogsNode = document.getElementById("collector-logs");
       const syntheticLogsNode = document.getElementById("synthetic-logs");
       const githubPollLogsNode = document.getElementById("github-poll-logs");
+      const clickhouseDataNode = document.getElementById("clickhouse-data");
       const ingestLogsNode = document.getElementById("ingest-logs");
       const newRelicDataNode = document.getElementById("newrelic-data");
       const resultNode = document.getElementById("result");
@@ -777,6 +832,10 @@
           {
             label: "New Relic key",
             ok: data.signals.new_relic_key_set,
+          },
+          {
+            label: "ClickHouse",
+            ok: data.signals.clickhouse_settings_set,
           },
           {
             label: "GitHub token",
@@ -865,6 +924,13 @@
         renderNewRelicOutput(logsData);
       }
 
+      async function refreshClickHouseSummary() {
+        const data = await apiGet("/api/clickhouse/summary");
+        clickhouseDataNode.textContent = JSON.stringify(data, null, 2);
+        clickhouseDataNode.dataset.source = "query";
+        setActiveTab("clickhouse");
+      }
+
       async function refreshNewRelicSummary() {
         const data = await apiGet("/api/newrelic/summary");
         newRelicDataNode.textContent = JSON.stringify(data, null, 2);
@@ -901,7 +967,8 @@
             action !== "stop-pipeline" &&
             action !== "stop-all" &&
             action !== "clear-logs" &&
-            action !== "refresh-newrelic";
+            action !== "refresh-newrelic" &&
+            action !== "refresh-clickhouse";
         }
       }
 
@@ -937,6 +1004,9 @@
           if (action === "collector-start-local") {
             await apiPost("/api/collector/start", { mode: "local" });
             setActiveTab("collector");
+          } else if (action === "collector-start-clickhouse") {
+            await apiPost("/api/collector/start", { mode: "clickhouse" });
+            setActiveTab("collector");
           } else if (action === "collector-start-nr") {
             await apiPost("/api/collector/start", { mode: "newrelic" });
             setActiveTab("newrelic");
@@ -946,6 +1016,15 @@
             } catch {
               // If query credentials are missing, collector-side exporter logs
               // will still appear via refreshStatusAndLogs().
+            }
+          } else if (action === "collector-start-dual") {
+            await apiPost("/api/collector/start", { mode: "dual" });
+            setActiveTab("collector");
+            newRelicDataNode.dataset.source = "";
+            try {
+              await refreshNewRelicSummary();
+            } catch {
+              // ClickHouse verification is via SQL / MCP; NR query is optional.
             }
           } else if (action === "collector-stop") {
             await apiPost("/api/collector/stop");
@@ -958,6 +1037,19 @@
           } else if (action === "run-ingest") {
             await apiPost("/api/pipelines/ingest-sample");
             setActiveTab("ingest");
+          } else if (action === "run-github-clickhouse-test") {
+            showResult(
+              "Running full test (collector + GitHub poll + ClickHouse query). This may take up to 2 minutes..."
+            );
+            const data = await apiPost("/api/pipelines/github-clickhouse-test");
+            clickhouseDataNode.textContent = JSON.stringify(data, null, 2);
+            clickhouseDataNode.dataset.source = "query";
+            setActiveTab("clickhouse");
+            const traces = data.clickhouse?.trace_count ?? "?";
+            const githubTraces = data.clickhouse?.github_related_trace_count ?? "?";
+            showResult(
+              `Done. ClickHouse traces: ${traces} (GitHub-related: ${githubTraces}). See ClickHouse tab.`
+            );
           } else if (action === "run-github") {
             await apiPost("/api/pipelines/github-poll", {
               once: false,
@@ -986,11 +1078,16 @@
             syntheticLogsNode.textContent = "(no logs)";
             githubPollLogsNode.textContent = "(no logs)";
             ingestLogsNode.textContent = "(no logs)";
+            clickhouseDataNode.textContent =
+              "(not loaded - run GitHub to ClickHouse test or refresh)";
+            clickhouseDataNode.dataset.source = "";
             newRelicDataNode.textContent =
-              "(not loaded — start collector in New Relic mode, then refresh)";
+              "(not loaded - start collector in New Relic mode, then refresh)";
             newRelicDataNode.dataset.source = "";
           } else if (action === "refresh-newrelic") {
             await refreshNewRelicSummary();
+          } else if (action === "refresh-clickhouse") {
+            await refreshClickHouseSummary();
           } else if (action === "clear-logs") {
             await apiPost("/api/logs/clear");
             collectorLogsNode.textContent = "(no logs)";
@@ -1001,7 +1098,9 @@
               "(not loaded — start collector in New Relic mode, then refresh)";
             newRelicDataNode.dataset.source = "";
           }
-          showResult("Done.");
+          if (action !== "run-github-clickhouse-test") {
+            showResult("Done.");
+          }
         } catch (err) {
           const text = String(err.message || err);
           if (text.includes("currently running")) {
@@ -1014,6 +1113,8 @@
             showResult("Set GEMINI_API_KEY to use AI ingest.", true);
           } else if (text.includes("GitHub token")) {
             showResult("Set GITHUB_TOKEN or create .github_token.", true);
+          } else if (text.includes("ClickHouse")) {
+            showResult(text, true);
           } else if (text.includes("New Relic query not configured")) {
             showResult(
               "Set NEW_RELIC_USER_API_KEY and NEW_RELIC_ACCOUNT_ID.",

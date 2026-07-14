@@ -6,6 +6,9 @@
 .gemini_api_key
 .github_token
 .new_relic_license_key
+.clickhouse_endpoint
+.clickhouse_user
+.clickhouse_password
 
 .venv/
 examples/openai_otel/.venv/
@@ -14,6 +17,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 dist/otel-custom/
+dist/otelcol-contrib/
 
-# Local NR config may contain secrets if edited — keep example only in git
+# Local backend configs may contain secrets if edited — keep examples only in git
 collector/collector-config-nr.yaml
+collector/collector-config-dual.yaml
+collector/collector-config-clickhouse.yaml

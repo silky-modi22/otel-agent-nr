@@ -30,6 +30,8 @@ def ensure_collector_tcp(endpoint: str) -> None:
             "  ./scripts/run-collector.sh\n"
             "or:\n"
             "  export NEW_RELIC_LICENSE_KEY=... && ./scripts/run-collector-nr.sh\n"
+            "or dual (NR + ClickHouse):\n"
+            "  ./scripts/run-collector-dual.sh\n"
             "Skip: SKIP_COLLECTOR_CHECK=1 python -m agent serve ...",
             file=sys.stderr,
         )

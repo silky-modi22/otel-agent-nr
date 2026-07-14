@@ -68,10 +68,52 @@ class ProcessManager:
         self._ingest_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
 
     def _collector_bin_path(self) -> Path:
-        return self.repo_root / "dist" / "otel-custom" / "otel-custom"
+        resolved = self._resolve_collector_binary()
+        if resolved is None:
+            return self.repo_root / "dist" / "otel-custom" / "otel-custom"
+        return resolved
+
+    def _resolve_collector_binary(self) -> Path | None:
+        candidates = [
+            self.repo_root / "dist" / "otelcol-contrib" / "otelcol-contrib.exe",
+            self.repo_root / "dist" / "otelcol-contrib" / "otelcol-contrib",
+            self.repo_root / "dist" / "otel-custom" / "otel-custom.exe",
+            self.repo_root / "dist" / "otel-custom" / "otel-custom",
+        ]
+        for path in candidates:
+            if os.access(path, os.X_OK):
+                return path
+        return None
 
     def collector_binary_ready(self) -> bool:
-        return os.access(self._collector_bin_path(), os.X_OK)
+        return self._resolve_collector_binary() is not None
+
+    def clickhouse_settings_set(self) -> bool:
+        return self._clickhouse_credentials()[0]
+
+    def _clickhouse_credentials(self) -> tuple[bool, str, str, str]:
+        endpoint = os.environ.get("CLICKHOUSE_ENDPOINT", "").strip()
+        user = os.environ.get("CLICKHOUSE_USER", "").strip()
+        password = os.environ.get("CLICKHOUSE_PASSWORD", "").strip()
+        if not endpoint:
+            endpoint = _read_secret_file(self.repo_root / ".clickhouse_endpoint") or ""
+        if not user:
+            user = _read_secret_file(self.repo_root / ".clickhouse_user") or ""
+        if not password:
+            password = _read_secret_file(self.repo_root / ".clickhouse_password") or ""
+        ok = bool(endpoint and user and password)
+        return ok, endpoint, user, password
+
+    def _apply_clickhouse_env(self, env: dict[str, str]) -> None:
+        ok, endpoint, user, password = self._clickhouse_credentials()
+        if not ok:
+            raise RuntimeError(
+                "Missing ClickHouse settings. Set CLICKHOUSE_* env vars or create "
+                ".clickhouse_endpoint, .clickhouse_user, .clickhouse_password."
+            )
+        env.setdefault("CLICKHOUSE_ENDPOINT", endpoint)
+        env.setdefault("CLICKHOUSE_USER", user)
+        env.setdefault("CLICKHOUSE_PASSWORD", password)
 
     def new_relic_key_set(self) -> bool:
         env = os.environ.get("NEW_RELIC_LICENSE_KEY", "").strip()
@@ -145,26 +187,31 @@ class ProcessManager:
                 self._job_task = None
 
     async def start_collector(self, mode: str) -> dict[str, str]:
-        if mode not in {"local", "newrelic"}:
-            raise RuntimeError("mode must be local or newrelic")
-        binary_path = self._collector_bin_path()
-        if not os.access(binary_path, os.X_OK):
+        if mode not in {"local", "newrelic", "dual", "clickhouse"}:
+            raise RuntimeError(
+                "mode must be local, newrelic, dual, or clickhouse"
+            )
+        binary_path = self._resolve_collector_binary()
+        if binary_path is None:
             raise RuntimeError(
                 "Collector binary not found. "
-                "Run ./scripts/build-collector.sh first."
+                "Run ./scripts/build-collector.sh or place otelcol-contrib under dist/."
             )
 
-        config_rel = (
-            "collector/collector-config.yaml"
-            if mode == "local"
-            else "collector/collector-config-nr.yaml"
-        )
+        if mode == "local":
+            config_rel = "collector/collector-config.yaml"
+        elif mode == "dual":
+            config_rel = "collector/collector-config-dual.yaml"
+        elif mode == "clickhouse":
+            config_rel = "collector/collector-config-clickhouse.yaml"
+        else:
+            config_rel = "collector/collector-config-nr.yaml"
         config_path = self.repo_root / config_rel
         if not config_path.is_file():
             raise RuntimeError(f"Config not found: {config_rel}")
 
         env = os.environ.copy()
-        if mode == "newrelic":
+        if mode in {"newrelic", "dual"}:
             license_key = env.get("NEW_RELIC_LICENSE_KEY", "").strip()
             if not license_key:
                 from_file = _read_secret_file(
@@ -177,6 +224,9 @@ class ProcessManager:
                 raise RuntimeError(
                     "NEW_RELIC_LICENSE_KEY is required for New Relic mode."
                 )
+
+        if mode in {"dual", "clickhouse"}:
+            self._apply_clickhouse_env(env)
 
         async with self._lock:
             if (
@@ -202,6 +252,33 @@ class ProcessManager:
                 f"{mode} mode with {config_rel} (pid={proc.pid})"
             )
         return {"status": "started", "mode": mode}
+
+    async def ensure_collector_for_clickhouse(self) -> dict[str, str]:
+        """Start clickhouse or dual collector if nothing is listening on :4318."""
+        if self.collector_listening():
+            mode = self._collector_mode
+            if mode in {"local", "newrelic"}:
+                raise RuntimeError(
+                    f"Collector is running in '{mode}' mode. "
+                    "Stop it and start ClickHouse or dual export first."
+                )
+            return {"status": "ready", "mode": mode or "external"}
+        preferred = "dual" if self.new_relic_key_set() else "clickhouse"
+        return await self.start_collector(preferred)
+
+    async def wait_for_job(self, *, timeout_sec: float = 180.0) -> int | None:
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            async with self._lock:
+                proc = self._job_proc
+                inline_name = self._job_name if proc is None else None
+            if proc is None and inline_name is None:
+                async with self._lock:
+                    return self._job_exit_code
+            if proc is not None and proc.returncode is not None:
+                return proc.returncode
+            await asyncio.sleep(0.25)
+        raise RuntimeError("Timed out waiting for pipeline job to finish.")
 
     async def stop_collector(self) -> dict[str, str]:
         async with self._lock:
@@ -394,6 +471,7 @@ class ProcessManager:
                 "collector_listening_4318": self.collector_listening(),
                 "collector_binary_ready": self.collector_binary_ready(),
                 "new_relic_key_set": self.new_relic_key_set(),
+                "clickhouse_settings_set": self.clickhouse_settings_set(),
                 "github_token_set": self.github_token_set(),
             },
         }

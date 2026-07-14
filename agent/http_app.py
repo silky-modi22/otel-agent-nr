@@ -18,6 +18,7 @@ from google.genai.errors import APIError
 from opentelemetry import metrics, trace
 from pydantic import BaseModel, Field
 
+from .clickhouse_client import clickhouse_status, fetch_summary as fetch_clickhouse_summary
 from .collector_check import ensure_collector_tcp
 from .emit_from_ir import EmitHandles, emit_from_ir
 from .gemini_telemetry import generate_telemetry_plan, resolve_api_key
@@ -41,7 +42,10 @@ DEFAULT_SAMPLE_INGEST_PAYLOAD: dict[str, Any] = {
 
 
 class CollectorStartRequest(BaseModel):
-    mode: str = Field(default="local", pattern="^(local|newrelic)$")
+    mode: str = Field(
+        default="local",
+        pattern="^(local|newrelic|dual|clickhouse)$",
+    )
 
 
 class SyntheticJobRequest(BaseModel):
@@ -220,6 +224,7 @@ def create_app() -> FastAPI:
             "status": "ok",
             "gemini_api_key_set": resolve_api_key() is not None,
             "new_relic_query": newrelic_status(REPO_ROOT),
+            "clickhouse_query": clickhouse_status(REPO_ROOT),
             "startup_collector_ready": app.state.startup_collector_ready,
             **manager.status(),
         }
@@ -326,6 +331,11 @@ def create_app() -> FastAPI:
                 status_code=503,
                 detail="No GitHub token found. Set GITHUB_TOKEN or create .github_token.",
             )
+        if resolve_api_key() is None:
+            raise HTTPException(
+                status_code=503,
+                detail="GEMINI_API_KEY is not configured.",
+            )
         try:
             return await manager.start_job(
                 name="github-poll-once",
@@ -371,6 +381,81 @@ def create_app() -> FastAPI:
                 "collector": collector_result,
                 "logs": logs_result,
             },
+        }
+
+    @app.get("/api/clickhouse/summary")
+    async def api_clickhouse_summary() -> dict[str, Any]:
+        try:
+            summary = await asyncio.to_thread(fetch_clickhouse_summary, REPO_ROOT)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"status": "ok", **summary}
+
+    @app.post("/api/pipelines/github-clickhouse-test")
+    async def api_github_clickhouse_test() -> dict[str, Any]:
+        """End-to-end: ensure ClickHouse collector, poll GitHub once, query ClickHouse."""
+        manager: ProcessManager = app.state.process_manager
+        if resolve_api_key() is None:
+            raise HTTPException(
+                status_code=503,
+                detail="GEMINI_API_KEY is not configured.",
+            )
+        if not manager.clickhouse_settings_set():
+            raise HTTPException(
+                status_code=503,
+                detail="ClickHouse is not configured (.clickhouse_* files or env).",
+            )
+
+        collector_info: dict[str, str]
+        try:
+            collector_info = await manager.ensure_collector_for_clickhouse()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        if collector_info.get("status") == "started":
+            deadline = time.time() + 45.0
+            while time.time() < deadline:
+                if manager.collector_listening():
+                    break
+                await asyncio.sleep(0.5)
+            if not manager.collector_listening():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Collector started but :4318 is not listening yet.",
+                )
+
+        github_repo = os.environ.get(
+            "GITHUB_REPO", "silky-modi22/otel-agent-nr"
+        ).strip()
+        try:
+            job = await manager.start_job(
+                name="github-poll-once",
+                command=(sys.executable, "examples/github_ingest/poller.py"),
+                env={
+                    "GITHUB_POLL_ONCE": "1",
+                    "GITHUB_POLL_INTERVAL_SEC": "30",
+                    "INGEST_URL": "http://127.0.0.1:8000/ingest",
+                    "GITHUB_REPO": github_repo,
+                },
+            )
+            exit_code = await manager.wait_for_job(timeout_sec=180.0)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        await asyncio.sleep(15)
+        try:
+            clickhouse = await asyncio.to_thread(
+                fetch_clickhouse_summary, REPO_ROOT
+            )
+        except RuntimeError as exc:
+            clickhouse = {"error": str(exc)}
+
+        return {
+            "status": "ok" if exit_code == 0 else "partial",
+            "collector": collector_info,
+            "github_repo": github_repo,
+            "github_poll_exit_code": exit_code,
+            "clickhouse": clickhouse,
         }
 
     @app.get("/api/newrelic/summary")

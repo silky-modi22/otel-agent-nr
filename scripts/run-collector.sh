@@ -17,11 +17,37 @@ if [[ ! -f "$CONFIG" ]]; then
 fi
 
 IS_NR_CONFIG=0
+IS_DUAL_CONFIG=0
 case "$CONFIG" in
+  *collector-config-dual.yaml*) IS_DUAL_CONFIG=1 ;;
   *collector-config-nr.yaml*) IS_NR_CONFIG=1 ;;
 esac
 
-if [[ "$IS_NR_CONFIG" -eq 1 ]]; then
+if [[ "$IS_DUAL_CONFIG" -eq 1 ]]; then
+  cat << EOF
+
+================================================================
+  TERMINAL 1 — Collector → New Relic + ClickHouse (this window)
+================================================================
+  Role: Receives OTLP on localhost:4318 and dual-exports to:
+  - New Relic (otlphttp)
+  - ClickHouse (otel_* tables in database "otel")
+
+  What you should see:
+  - "Everything is ready. Begin running and processing data."
+  - Then mostly silence (no debug dump).
+  - Export problems show as error lines (403, auth, Dropping data).
+
+  Verify:
+  - New Relic UI: service.name = otel-sample-agent
+  - ClickHouse: SELECT count() FROM otel.otel_traces
+
+  Config: $CONFIG
+  Press Ctrl+C here to stop the collector.
+================================================================
+
+EOF
+elif [[ "$IS_NR_CONFIG" -eq 1 ]]; then
   cat << EOF
 
 ================================================================
