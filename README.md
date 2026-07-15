@@ -38,6 +38,8 @@ Optional: `./scripts/run-agent.sh --duration 60 --interval 0.4`
 
 **New Relic + ClickHouse (dual):** rebuild the collector once (`./scripts/build-collector.sh`), copy [`collector/collector-config-dual.yaml.example`](collector/collector-config-dual.yaml.example) → `collector-config-dual.yaml`, set `NEW_RELIC_LICENSE_KEY` and `CLICKHOUSE_ENDPOINT` / `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD`, then Terminal 1: [`./scripts/run-collector-dual.sh`](scripts/run-collector-dual.sh). Details: **[docs/clickhouse-collector-checklist.md](docs/clickhouse-collector-checklist.md)**.
 
+**eBPF → ClickHouse (Grafana Beyla):** auto-instrument an app via eBPF (zero code changes) and stream traces/metrics to ClickHouse. Runs on Linux/WSL2 only (eBPF needs a privileged kernel — not Windows, not Railway): `docker compose -f docker-compose.ebpf.yml --env-file .env.ebpf up --build`. Full setup: **[docs/ebpf-clickhouse.md](docs/ebpf-clickhouse.md)**.
+
 ### Same flow without helpers
 
 ```bash

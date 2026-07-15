@@ -3,6 +3,7 @@
 
 # Local secrets (e.g. GEMINI_API_KEY for `python -m agent serve`)
 .env
+.env.ebpf
 .gemini_api_key
 .github_token
 .new_relic_license_key

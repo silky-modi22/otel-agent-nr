@@ -1,0 +1,67 @@
+# eBPF -> ClickHouse pipeline.
+#
+# Grafana Beyla auto-instruments the FastAPI agent via eBPF (zero code changes),
+# turns its HTTP traffic into OpenTelemetry traces + metrics, and exports OTLP to
+# the custom collector, which writes to ClickHouse Cloud.
+#
+#   app  ──(eBPF, Beyla)──▶  collector (clickhouse exporter)  ──▶  ClickHouse Cloud
+#
+# IMPORTANT: eBPF needs a privileged Linux kernel. Run this on Linux or WSL2 —
+# NOT on Windows directly and NOT on Railway (managed containers aren't privileged).
+# See docs/ebpf-clickhouse.md for full setup.
+#
+# 1. Create .env.ebpf from .env.ebpf.example with your ClickHouse credentials.
+# 2. docker compose -f docker-compose.ebpf.yml --env-file .env.ebpf up --build
+# 3. Generate traffic:  curl http://localhost:8000/health   (repeat a few times)
+# 4. Query ClickHouse: SELECT * FROM otel.otel_traces WHERE ServiceName='otel-agent-ebpf'
+
+services:
+  # The app we want to observe with eBPF (your FastAPI agent).
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8000"
+      # Telemetry is captured by Beyla + the collector below, so the app does
+      # not need to spawn its own in-container collector.
+      SKIP_COLLECTOR_CHECK: "1"
+    ports:
+      - "8000:8000"
+
+  # eBPF auto-instrumentation. Shares the app's PID namespace and runs privileged
+  # so it can load eBPF probes and attach to the process listening on port 8000.
+  beyla:
+    image: grafana/beyla:latest
+    pid: "service:app"
+    privileged: true
+    environment:
+      # Instrument whatever process is listening on this port inside the shared
+      # PID namespace (the FastAPI app). Change to instrument a different app.
+      BEYLA_OPEN_PORT: "8000"
+      OTEL_SERVICE_NAME: "otel-agent-ebpf"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://collector:4318"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+      BEYLA_LOG_LEVEL: "INFO"
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+    depends_on:
+      - app
+      - collector
+
+  # Custom OTel collector (built with the ClickHouse exporter) that receives
+  # Beyla's OTLP and writes to ClickHouse Cloud.
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile.collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./collector/collector-config-ebpf.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      CLICKHOUSE_ENDPOINT: ${CLICKHOUSE_ENDPOINT}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    expose:
+      - "4318"
+      - "4317"
