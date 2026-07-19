@@ -228,6 +228,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "gemini_api_key_set": resolve_api_key() is not None,
+            "anthropic_api_key_set": manager.anthropic_key_set(),
             "new_relic_query": newrelic_status(REPO_ROOT),
             "clickhouse_query": clickhouse_status(REPO_ROOT),
             "startup_collector_ready": app.state.startup_collector_ready,
@@ -447,6 +448,12 @@ def create_app() -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+        # Capture the poller's captured stdout/stderr so the synchronous
+        # one-shot can surface it in the GitHub Output pane (the job has
+        # already finished by the time this endpoint returns, so live status
+        # polling would otherwise show nothing).
+        github_logs = manager.logs().get("github_poll", [])
+
         await asyncio.sleep(15)
         try:
             clickhouse = await asyncio.to_thread(
@@ -460,6 +467,7 @@ def create_app() -> FastAPI:
             "collector": collector_info,
             "github_repo": github_repo,
             "github_poll_exit_code": exit_code,
+            "github_logs": github_logs,
             "clickhouse": clickhouse,
         }
 
@@ -523,6 +531,90 @@ def create_app() -> FastAPI:
             "collector": collector_info,
             "github_repo": github_repo,
             "interval_sec": body.interval_sec,
+            "job": job,
+        }
+
+    async def _ensure_clickhouse_collector_ready(
+        manager: ProcessManager,
+    ) -> dict[str, str]:
+        """Auto-start a ClickHouse/dual collector and wait for :4318 (shared helper)."""
+        try:
+            collector_info = await manager.ensure_collector_for_clickhouse()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        if collector_info.get("status") == "started":
+            deadline = time.time() + 45.0
+            while time.time() < deadline:
+                if manager.collector_listening():
+                    break
+                await asyncio.sleep(0.5)
+            if not manager.collector_listening():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Collector started but :4318 is not listening yet.",
+                )
+        return collector_info
+
+    @app.post("/api/pipelines/gemini-sample")
+    async def api_run_gemini_sample() -> dict[str, Any]:
+        """Trace a real Gemini API call server-side and export OTLP to :4318."""
+        manager: ProcessManager = app.state.process_manager
+        gemini_key = resolve_api_key()
+        if gemini_key is None:
+            raise HTTPException(
+                status_code=503,
+                detail="GEMINI_API_KEY is not configured.",
+            )
+
+        collector_info = await _ensure_clickhouse_collector_ready(manager)
+
+        try:
+            job = await manager.start_job(
+                name="gemini-sample",
+                command=(sys.executable, "examples/gemini_otel/client.py"),
+                env={
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+                    "GEMINI_API_KEY": gemini_key,
+                },
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return {
+            "status": "started",
+            "collector": collector_info,
+            "job": job,
+        }
+
+    @app.post("/api/pipelines/anthropic-sample")
+    async def api_run_anthropic_sample() -> dict[str, Any]:
+        """Trace a real Anthropic API call server-side and export OTLP to :4318."""
+        manager: ProcessManager = app.state.process_manager
+        anthropic_key = manager.resolve_anthropic_key()
+        if anthropic_key is None:
+            raise HTTPException(
+                status_code=503,
+                detail="ANTHROPIC_API_KEY is not configured.",
+            )
+
+        collector_info = await _ensure_clickhouse_collector_ready(manager)
+
+        try:
+            job = await manager.start_job(
+                name="anthropic-sample",
+                command=(sys.executable, "examples/anthropic_otel/client.py"),
+                env={
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
+                    "ANTHROPIC_API_KEY": anthropic_key,
+                },
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return {
+            "status": "started",
+            "collector": collector_info,
             "job": job,
         }
 

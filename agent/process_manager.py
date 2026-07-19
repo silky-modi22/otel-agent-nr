@@ -47,6 +47,18 @@ def _resolve_github_token(repo_root: Path) -> str | None:
     return _read_secret_file(repo_root / ".github_token")
 
 
+def _resolve_anthropic_key(repo_root: Path) -> str | None:
+    value = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if value:
+        return value
+    file_path = os.environ.get("ANTHROPIC_API_KEY_FILE", "").strip()
+    if file_path:
+        key = _read_secret_file(Path(file_path))
+        if key:
+            return key
+    return _read_secret_file(repo_root / ".anthropic_api_key")
+
+
 class ProcessManager:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
@@ -66,6 +78,8 @@ class ProcessManager:
         self._synthetic_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
         self._github_poll_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
         self._ingest_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
+        self._gemini_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
+        self._anthropic_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
 
     def _collector_bin_path(self) -> Path:
         resolved = self._resolve_collector_binary()
@@ -127,6 +141,12 @@ class ProcessManager:
     def github_token_set(self) -> bool:
         return _resolve_github_token(self.repo_root) is not None
 
+    def anthropic_key_set(self) -> bool:
+        return _resolve_anthropic_key(self.repo_root) is not None
+
+    def resolve_anthropic_key(self) -> str | None:
+        return _resolve_anthropic_key(self.repo_root)
+
     def collector_listening(self) -> bool:
         return _collector_listening()
 
@@ -148,6 +168,10 @@ class ProcessManager:
             return (self._job_logs, self._github_poll_logs)
         if name == "ingest-sample":
             return (self._job_logs, self._ingest_logs)
+        if name == "gemini-sample":
+            return (self._job_logs, self._gemini_logs)
+        if name == "anthropic-sample":
+            return (self._job_logs, self._anthropic_logs)
         return (self._job_logs,)
 
     async def _drain_output(
@@ -320,6 +344,9 @@ class ProcessManager:
                     sink.clear()
             self._job_exit_code = None
             run_env = os.environ.copy()
+            # Force line/stream flushing so child stdout streams to the log
+            # buffers in real time instead of being block-buffered until exit.
+            run_env["PYTHONUNBUFFERED"] = "1"
             if env:
                 run_env.update(env)
             proc = await asyncio.create_subprocess_exec(
@@ -473,6 +500,7 @@ class ProcessManager:
                 "new_relic_key_set": self.new_relic_key_set(),
                 "clickhouse_settings_set": self.clickhouse_settings_set(),
                 "github_token_set": self.github_token_set(),
+                "anthropic_api_key_set": self.anthropic_key_set(),
             },
         }
 
@@ -483,6 +511,8 @@ class ProcessManager:
             "synthetic": list(self._synthetic_logs),
             "github_poll": list(self._github_poll_logs),
             "ingest": list(self._ingest_logs),
+            "gemini": list(self._gemini_logs),
+            "anthropic": list(self._anthropic_logs),
         }
 
     async def clear_logs(self) -> dict[str, str]:
@@ -492,4 +522,6 @@ class ProcessManager:
             self._synthetic_logs.clear()
             self._github_poll_logs.clear()
             self._ingest_logs.clear()
+            self._gemini_logs.clear()
+            self._anthropic_logs.clear()
         return {"status": "cleared"}

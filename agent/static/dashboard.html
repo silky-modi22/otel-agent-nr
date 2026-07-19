@@ -452,22 +452,6 @@
         font-weight: 500;
       }
 
-      .tag {
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 2px 6px;
-        border-radius: 5px;
-        background: var(--accent-dim);
-        color: var(--accent);
-      }
-
-      button.mode-active .tag {
-        background: var(--accent);
-        color: #062018;
-      }
-
       /* Button loading spinner */
       .spinner {
         width: 13px;
@@ -842,7 +826,6 @@
               type="button"
             >
               Send to ClickHouse only
-              <span class="tag">Recommended</span>
             </button>
             <button data-action="collector-start-dual" type="button">
               Send to New Relic + ClickHouse
@@ -884,6 +867,12 @@
             </button>
             <button data-action="run-github-clickhouse-live" type="button">
               Stream GitHub events continuously → ClickHouse
+            </button>
+            <button data-action="run-gemini-sample" type="button">
+              Trace a Gemini API call → ClickHouse
+            </button>
+            <button data-action="run-anthropic-sample" type="button">
+              Trace an Anthropic API call → ClickHouse
             </button>
           </div>
           <p class="step-hint" id="step-2-hint">
@@ -949,6 +938,8 @@
           </button>
           <button class="tab" data-tab="ingest" type="button" role="tab">AI Ingest</button>
           <button class="tab" data-tab="github" type="button" role="tab">GitHub</button>
+          <button class="tab" data-tab="gemini" type="button" role="tab">Gemini</button>
+          <button class="tab" data-tab="anthropic" type="button" role="tab">Anthropic</button>
           <button class="tab" data-tab="clickhouse" type="button" role="tab">ClickHouse</button>
           <button class="tab" data-tab="newrelic" type="button" role="tab">
             New Relic
@@ -965,6 +956,12 @@
         </div>
         <div class="log-pane" data-pane="github" role="tabpanel">
           <pre id="github-poll-logs" class="empty">Run a GitHub button in Step 2 to see the poller stream events here.</pre>
+        </div>
+        <div class="log-pane" data-pane="gemini" role="tabpanel">
+          <pre id="gemini-logs" class="empty">Run “Trace a Gemini API call” in Step 2 to see the instrumented Gemini call and OTLP export here.</pre>
+        </div>
+        <div class="log-pane" data-pane="anthropic" role="tabpanel">
+          <pre id="anthropic-logs" class="empty">Run “Trace an Anthropic API call” in Step 2 to see the instrumented Anthropic call and OTLP export here.</pre>
         </div>
         <div class="log-pane" data-pane="clickhouse" role="tabpanel">
           <div class="pane-toolbar">
@@ -1007,6 +1004,8 @@
       const collectorLogsNode = document.getElementById("collector-logs");
       const syntheticLogsNode = document.getElementById("synthetic-logs");
       const githubPollLogsNode = document.getElementById("github-poll-logs");
+      const geminiLogsNode = document.getElementById("gemini-logs");
+      const anthropicLogsNode = document.getElementById("anthropic-logs");
       const clickhouseDataNode = document.getElementById("clickhouse-data");
       const ingestLogsNode = document.getElementById("ingest-logs");
       const newRelicDataNode = document.getElementById("newrelic-data");
@@ -1142,7 +1141,7 @@
           const hint = document.getElementById("step-2-hint");
           if (hint) {
             hint.textContent =
-              "Anthropic and Gemini demos have no button — run them from the CLI with .\\scripts\\run-anthropic.ps1 or .\\scripts\\run-gemini.ps1 while a collector is running.";
+              "Pick a telemetry source above. GitHub and Gemini/Anthropic buttons auto-start the ClickHouse collector if needed; each API button unlocks once its key is set.";
           }
         } else {
           setStep(2, "locked", "Locked");
@@ -1177,6 +1176,9 @@
         const nr = Boolean(s.new_relic_key_set);
         const gh = Boolean(s.github_token_set);
         const gem = Boolean(data?.gemini_api_key_set);
+        const anthropic = Boolean(
+          data?.anthropic_api_key_set || s.anthropic_api_key_set
+        );
 
         // Step 4 controls and clear are always available.
         if (
@@ -1222,6 +1224,18 @@
           if (!ch) return { disabled: true, title: "ClickHouse is not configured" };
           if (!gh) return { disabled: true, title: "GitHub token is not configured" };
           if (!gem) return { disabled: true, title: "GEMINI_API_KEY is not configured" };
+          return { disabled: false };
+        }
+        if (action === "run-gemini-sample") {
+          if (!listening) return { disabled: true, title: "Start the collector first (Step 1)" };
+          if (busy) return { disabled: true, title: "A job is already running" };
+          if (!gem) return { disabled: true, title: "Set GEMINI_API_KEY" };
+          return { disabled: false };
+        }
+        if (action === "run-anthropic-sample") {
+          if (!listening) return { disabled: true, title: "Start the collector first (Step 1)" };
+          if (busy) return { disabled: true, title: "A job is already running" };
+          if (!anthropic) return { disabled: true, title: "Set ANTHROPIC_API_KEY" };
           return { disabled: false };
         }
 
@@ -1333,6 +1347,18 @@
           (logsData.ingest || []).join("\n") ||
             "Run “Send AI-shaped sample payload” in Step 2 to see the Gemini-generated telemetry plan here.",
           !(logsData.ingest || []).length
+        );
+        setPre(
+          geminiLogsNode,
+          (logsData.gemini || []).join("\n") ||
+            "Run “Trace a Gemini API call” in Step 2 to see the instrumented Gemini call and OTLP export here.",
+          !(logsData.gemini || []).length
+        );
+        setPre(
+          anthropicLogsNode,
+          (logsData.anthropic || []).join("\n") ||
+            "Run “Trace an Anthropic API call” in Step 2 to see the instrumented Anthropic call and OTLP export here.",
+          !(logsData.anthropic || []).length
         );
         renderNewRelicOutput(logsData);
       }
@@ -1486,14 +1512,24 @@
             const data = await apiPost("/api/pipelines/github-clickhouse-test");
             const count = data.clickhouse?.trace_count;
             const delta = noteTraceCount(count);
+            // Surface the poller's captured output in the GitHub pane — the
+            // synchronous one-shot has already finished the job by the time it
+            // returns, so status polling alone would show nothing there.
+            const githubLines = data.github_logs || [];
+            setPre(
+              githubPollLogsNode,
+              githubLines.join("\n") ||
+                "Run a GitHub button in Step 2 to see the poller stream events here.",
+              !githubLines.length
+            );
             setPre(clickhouseDataNode, JSON.stringify(data, null, 2), false);
             clickhouseDataNode.dataset.source = "query";
-            setActiveTab("clickhouse");
+            setActiveTab("github");
             const traces = data.clickhouse?.trace_count ?? "?";
             const githubTraces = data.clickhouse?.github_related_trace_count ?? "?";
             const deltaText = delta && delta > 0 ? ` (+${delta} new)` : "";
             showResult(
-              `Done. ClickHouse traces: ${traces}${deltaText} · GitHub-related: ${githubTraces}. See ClickHouse tab.`,
+              `Done. ClickHouse traces: ${traces}${deltaText} · GitHub-related: ${githubTraces}. Poller output is in the GitHub tab; row counts in the ClickHouse tab.`,
               "success"
             );
           } else if (action === "run-github-clickhouse-live") {
@@ -1510,6 +1546,28 @@
               `Live stream started for ${data.github_repo} — polling every ` +
                 `${data.interval_sec}s. New GitHub events flow to ClickHouse ` +
                 `automatically. Use “Stop GitHub stream” to stop.`,
+              "success"
+            );
+          } else if (action === "run-gemini-sample") {
+            showResult(
+              "Tracing a real Gemini API call (auto-starting collector if needed)…",
+              "info"
+            );
+            await apiPost("/api/pipelines/gemini-sample");
+            setActiveTab("gemini");
+            showResult(
+              "Gemini call started — instrumented spans/metrics export to the collector. Watch the Gemini tab, then verify in ClickHouse.",
+              "success"
+            );
+          } else if (action === "run-anthropic-sample") {
+            showResult(
+              "Tracing a real Anthropic API call (auto-starting collector if needed)…",
+              "info"
+            );
+            await apiPost("/api/pipelines/anthropic-sample");
+            setActiveTab("anthropic");
+            showResult(
+              "Anthropic call started — instrumented spans/metrics export to the collector. Watch the Anthropic tab, then verify in ClickHouse.",
               "success"
             );
           } else if (action === "stop-github") {
@@ -1552,6 +1610,16 @@
               true
             );
             setPre(
+              geminiLogsNode,
+              "Run “Trace a Gemini API call” in Step 2 to see the instrumented Gemini call and OTLP export here.",
+              true
+            );
+            setPre(
+              anthropicLogsNode,
+              "Run “Trace an Anthropic API call” in Step 2 to see the instrumented Anthropic call and OTLP export here.",
+              true
+            );
+            setPre(
               clickhouseDataNode,
               "No query yet. Run a GitHub → ClickHouse button in Step 2, or click Refresh to count rows in otel.otel_traces.",
               true
@@ -1590,6 +1658,16 @@
               true
             );
             setPre(
+              geminiLogsNode,
+              "Run “Trace a Gemini API call” in Step 2 to see the instrumented Gemini call and OTLP export here.",
+              true
+            );
+            setPre(
+              anthropicLogsNode,
+              "Run “Trace an Anthropic API call” in Step 2 to see the instrumented Anthropic call and OTLP export here.",
+              true
+            );
+            setPre(
               newRelicDataNode,
               "No query yet. Start the collector in a New Relic mode, then click Refresh.",
               true
@@ -1600,6 +1678,8 @@
           const selfReporting =
             action === "run-github-clickhouse-test" ||
             action === "run-github-clickhouse-live" ||
+            action === "run-gemini-sample" ||
+            action === "run-anthropic-sample" ||
             action === "refresh-clickhouse";
           if (!selfReporting) {
             showResult("Done.", "success");
@@ -1614,6 +1694,8 @@
             showResult("Start the collector first (Step 1).", "error");
           } else if (text.includes("GEMINI_API_KEY")) {
             showResult("Set GEMINI_API_KEY to use AI ingest.", "error");
+          } else if (text.includes("ANTHROPIC_API_KEY")) {
+            showResult("Set ANTHROPIC_API_KEY to trace Anthropic calls.", "error");
           } else if (text.includes("GitHub token")) {
             showResult("Set GITHUB_TOKEN or create .github_token.", "error");
           } else if (text.includes("ClickHouse")) {

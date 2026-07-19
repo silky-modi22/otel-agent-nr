@@ -5,3 +5,11 @@ google-genai>=1.0.0,<2
 fastapi>=0.115.0,<1
 uvicorn[standard]>=0.32.0,<1
 pydantic>=2.9.0,<3
+# Server-side Gemini/Anthropic trace demos (examples/gemini_otel, examples/anthropic_otel).
+# google-generativeai is the CLASSIC SDK (import google.generativeai); it coexists
+# with google-genai above (import google.genai) — different top-level modules.
+google-generativeai>=0.8.0,<1
+opentelemetry-instrumentation-google-generativeai>=0.61.0,<1
+anthropic>=0.40.0,<1
+opentelemetry-instrumentation-anthropic>=0.62.0,<1
+truststore>=0.9.0
