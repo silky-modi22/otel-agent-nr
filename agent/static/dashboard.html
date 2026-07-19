@@ -374,6 +374,60 @@
         color: var(--text-muted);
       }
 
+      /* Dynamic Step 2 destination indicator */
+      .step-dest {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 14px;
+        font-size: 12px;
+      }
+
+      .dest-label {
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .dest-value {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--accent-ring);
+        background: var(--accent-dim);
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      .step-dest.locked .dest-value {
+        border-color: var(--warn-dim);
+        background: var(--warn-dim);
+        color: var(--warn);
+        font-weight: 400;
+      }
+
+      .dest-note {
+        flex-basis: 100%;
+        margin: 2px 0 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--text-muted);
+        display: none;
+      }
+
+      .dest-note.show {
+        display: block;
+      }
+
+      .dest-note.warn {
+        color: var(--warn);
+      }
+
       .btn-row {
         display: flex;
         flex-wrap: wrap;
@@ -787,10 +841,12 @@
               <strong>Step 2 — Start the agent.</strong> Choose what generates
               telemetry: <strong>synthetic sample traces</strong>, an
               <strong>AI-shaped sample payload</strong>,
-              <strong>fetch GitHub events once → ClickHouse</strong>, or
-              <strong>stream GitHub events continuously → ClickHouse</strong>. The
-              two GitHub buttons auto-start the ClickHouse collector if it isn't
-              running yet.
+              <strong>fetch / stream GitHub events</strong>, or
+              <strong>trace a Gemini or Anthropic API call</strong>. Each source
+              flows to the destination you picked in Step 1. The GitHub, Gemini,
+              and Anthropic sources require a ClickHouse-capable collector
+              (ClickHouse or New Relic + ClickHouse) and auto-start one if none
+              is running.
             </p>
           </div>
           <div class="guide-step">
@@ -855,6 +911,11 @@
             <span class="step-title">Start the agent / generate telemetry</span>
             <span class="step-badge locked" id="step-2-badge">Locked</span>
           </div>
+          <div class="step-dest locked" id="step-2-dest" aria-live="polite">
+            <span class="dest-label">Telemetry goes to</span>
+            <span class="dest-value" id="step-2-dest-value">start a collector in Step 1</span>
+            <p class="dest-note" id="step-2-dest-note"></p>
+          </div>
           <div class="btn-row">
             <button class="primary" data-action="run-synthetic" type="button">
               Generate sample traces (synthetic, ~20s)
@@ -863,20 +924,21 @@
               Send AI-shaped sample payload
             </button>
             <button data-action="run-github-clickhouse-test" type="button">
-              Fetch GitHub events once → ClickHouse
+              Fetch GitHub events (once)
             </button>
             <button data-action="run-github-clickhouse-live" type="button">
-              Stream GitHub events continuously → ClickHouse
+              Stream GitHub events (continuous)
             </button>
             <button data-action="run-gemini-sample" type="button">
-              Trace a Gemini API call → ClickHouse
+              Trace a Gemini API call
             </button>
             <button data-action="run-anthropic-sample" type="button">
-              Trace an Anthropic API call → ClickHouse
+              Trace an Anthropic API call
             </button>
           </div>
           <p class="step-hint" id="step-2-hint">
-            Start a collector in Step 1 to unlock these actions.
+            Any source below sends telemetry to the destination you chose in
+            Step 1.
           </p>
         </div>
 
@@ -973,7 +1035,7 @@
               Refresh
             </button>
           </div>
-          <pre id="clickhouse-data" class="empty">No query yet. Run a GitHub → ClickHouse button in Step 2, or click Refresh to count rows in otel.otel_traces.</pre>
+          <pre id="clickhouse-data" class="empty">No query yet. Run a GitHub source in Step 2 (with a ClickHouse-capable collector), or click Refresh to count rows in otel.otel_traces.</pre>
         </div>
         <div class="log-pane" data-pane="newrelic" role="tabpanel">
           <div class="pane-toolbar">
@@ -1031,6 +1093,13 @@
         dual: "New Relic + ClickHouse",
         newrelic: "New Relic only",
         local: "Local debug",
+      };
+      // Where telemetry actually lands for each running collector mode.
+      const MODE_DEST = {
+        clickhouse: "ClickHouse",
+        dual: "New Relic + ClickHouse",
+        newrelic: "New Relic",
+        local: "Local console (not exported)",
       };
 
       function detectApiBase() {
@@ -1135,13 +1204,31 @@
         }
 
         // Step 2 & 3 unlock once the collector is listening on :4318.
+        const dest = document.getElementById("step-2-dest");
+        const destValue = document.getElementById("step-2-dest-value");
+        const destNote = document.getElementById("step-2-dest-note");
+        const mode = data.collector?.mode;
         if (listening) {
           setStep(2, "active", "Ready");
           setStep(3, "active", "Ready");
           const hint = document.getElementById("step-2-hint");
           if (hint) {
             hint.textContent =
-              "Pick a telemetry source above. GitHub and Gemini/Anthropic buttons auto-start the ClickHouse collector if needed; each API button unlocks once its key is set.";
+              "Any source below sends telemetry to the destination you chose in Step 1. GitHub, Gemini, and Anthropic sources need a ClickHouse or New Relic + ClickHouse collector.";
+          }
+          if (dest) dest.classList.remove("locked");
+          if (destValue) destValue.textContent = MODE_DEST[mode] || "the running collector";
+          if (destNote) {
+            // github/gemini/anthropic endpoints force a ClickHouse-capable
+            // collector and refuse to run against New Relic-only or Local.
+            if (mode === "newrelic" || mode === "local") {
+              destNote.textContent =
+                "GitHub, Gemini & Anthropic sources need a ClickHouse-capable collector — they won’t run in this mode.";
+              destNote.classList.add("show", "warn");
+            } else {
+              destNote.textContent = "";
+              destNote.classList.remove("show", "warn");
+            }
           }
         } else {
           setStep(2, "locked", "Locked");
@@ -1149,6 +1236,12 @@
           const hint = document.getElementById("step-2-hint");
           if (hint) {
             hint.textContent = "Start a collector in Step 1 to unlock these actions.";
+          }
+          if (dest) dest.classList.add("locked");
+          if (destValue) destValue.textContent = "start a collector in Step 1";
+          if (destNote) {
+            destNote.textContent = "";
+            destNote.classList.remove("show", "warn");
           }
         }
 
@@ -1621,7 +1714,7 @@
             );
             setPre(
               clickhouseDataNode,
-              "No query yet. Run a GitHub → ClickHouse button in Step 2, or click Refresh to count rows in otel.otel_traces.",
+              "No query yet. Run a GitHub source in Step 2 (with a ClickHouse-capable collector), or click Refresh to count rows in otel.otel_traces.",
               true
             );
             clickhouseDataNode.dataset.source = "";
