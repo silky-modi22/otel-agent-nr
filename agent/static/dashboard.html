@@ -22,7 +22,11 @@
         --accent-dim: rgba(94, 234, 212, 0.12);
         --accent-ring: rgba(94, 234, 212, 0.25);
         --warn: #fbbf24;
+        --warn-dim: rgba(251, 191, 36, 0.12);
         --bad: #f87171;
+        --bad-dim: rgba(248, 113, 113, 0.12);
+        --ok: #4ade80;
+        --ok-dim: rgba(74, 222, 128, 0.12);
         --radius: 12px;
         --radius-sm: 8px;
       }
@@ -63,14 +67,37 @@
       main {
         position: relative;
         z-index: 1;
-        max-width: 720px;
+        max-width: 760px;
         margin: 0 auto;
         padding: 40px 20px 64px;
       }
 
+      /* ── Accessible focus ── */
+      a:focus-visible,
+      button:focus-visible,
+      summary:focus-visible,
+      input:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       /* ── Hero ── */
       .hero {
-        margin-bottom: 36px;
+        margin-bottom: 24px;
       }
 
       .hero-top {
@@ -141,8 +168,8 @@
         background: var(--surface);
         border: 1px solid var(--border-soft);
         border-radius: var(--radius);
-        padding: 16px 18px;
-        margin-bottom: 28px;
+        padding: 14px 18px;
+        margin-bottom: 24px;
       }
 
       .guide summary {
@@ -229,9 +256,11 @@
       }
 
       .step {
+        position: relative;
         background: var(--surface);
         border: 1px solid var(--border-soft);
         padding: 18px 18px 20px;
+        transition: opacity 0.2s, border-color 0.2s;
       }
 
       .step:first-child {
@@ -246,6 +275,16 @@
         border-top: none;
       }
 
+      /* Locked steps are dimmed to guide the sequence */
+      .step.locked {
+        opacity: 0.55;
+      }
+
+      .step.active {
+        border-color: var(--accent-ring);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+
       .step-head {
         display: flex;
         align-items: center;
@@ -257,14 +296,35 @@
         width: 24px;
         height: 24px;
         border-radius: 50%;
-        background: var(--accent-dim);
-        color: var(--accent);
+        background: var(--surface-2);
+        color: var(--text-soft);
         font-size: 12px;
         font-weight: 600;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        border: 1px solid var(--border);
+      }
+
+      .step.active .step-num {
+        background: var(--accent-dim);
+        color: var(--accent);
+        border-color: var(--accent-ring);
+      }
+
+      .step.done .step-num {
+        background: var(--ok-dim);
+        color: var(--ok);
+        border-color: rgba(74, 222, 128, 0.3);
+      }
+
+      .step.done .step-num::after {
+        content: "✓";
+      }
+
+      .step.done .step-num .num-label {
+        display: none;
       }
 
       .step-title {
@@ -273,10 +333,38 @@
         color: var(--text);
       }
 
-      .step-desc {
-        font-size: 12px;
-        color: var(--text-muted);
+      .step-badge {
         margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        background: var(--surface-2);
+        white-space: nowrap;
+      }
+
+      .step-badge.locked {
+        color: var(--warn);
+        border-color: var(--warn-dim);
+        background: var(--warn-dim);
+      }
+
+      .step-badge.ready,
+      .step-badge.active {
+        color: var(--accent);
+        border-color: var(--accent-ring);
+        background: var(--accent-dim);
+      }
+
+      .step-badge.done {
+        color: var(--ok);
+        border-color: rgba(74, 222, 128, 0.3);
+        background: var(--ok-dim);
       }
 
       .step-hint {
@@ -290,9 +378,15 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+        align-items: stretch;
       }
 
       button {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
         border: 1px solid var(--border);
         background: var(--surface-2);
         color: var(--text);
@@ -311,7 +405,7 @@
       }
 
       button:disabled {
-        opacity: 0.4;
+        opacity: 0.38;
         cursor: not-allowed;
       }
 
@@ -350,12 +444,53 @@
         border-color: rgba(248, 113, 113, 0.4);
       }
 
+      /* Active collector mode marker */
+      button.mode-active {
+        border-color: var(--accent);
+        background: rgba(94, 234, 212, 0.22);
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      .tag {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: var(--accent-dim);
+        color: var(--accent);
+      }
+
+      button.mode-active .tag {
+        background: var(--accent);
+        color: #062018;
+      }
+
+      /* Button loading spinner */
+      .spinner {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        animation: spin 0.6s linear infinite;
+        flex-shrink: 0;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       /* ── Status strip ── */
       .status-strip {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin: 20px 0 28px;
+        margin: 20px 0 24px;
       }
 
       .status-item {
@@ -370,14 +505,33 @@
         color: var(--text-muted);
       }
 
-      .status-item.ok {
-        color: var(--text-soft);
-        border-color: rgba(94, 234, 212, 0.15);
+      .status-item .sym {
+        font-size: 12px;
+        line-height: 1;
       }
 
-      .status-item .dot {
-        width: 6px;
-        height: 6px;
+      .status-item.on {
+        color: var(--text-soft);
+        border-color: var(--accent-ring);
+        background: var(--accent-dim);
+      }
+
+      .status-item.on .sym {
+        color: var(--accent);
+      }
+
+      .status-item.off .sym {
+        color: var(--text-muted);
+      }
+
+      .status-item.warn {
+        color: var(--warn);
+        border-color: var(--warn-dim);
+      }
+
+      .status-item strong {
+        color: inherit;
+        font-weight: 600;
       }
 
       /* ── Result toast ── */
@@ -386,11 +540,40 @@
         margin-top: 16px;
         font-size: 13px;
         color: var(--text-soft);
-        padding: 0 2px;
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        display: none;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .result.show {
+        display: flex;
+      }
+
+      .result .r-icon {
+        flex-shrink: 0;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .result.info {
+        background: var(--surface);
+        border-color: var(--border-soft);
+        color: var(--text-soft);
+      }
+
+      .result.success {
+        background: var(--ok-dim);
+        border-color: rgba(74, 222, 128, 0.3);
+        color: #b6f2cd;
       }
 
       .result.error {
-        color: var(--bad);
+        background: var(--bad-dim);
+        border-color: rgba(248, 113, 113, 0.35);
+        color: #fbc4c4;
       }
 
       /* ── Output panel ── */
@@ -445,6 +628,22 @@
         border-color: rgba(94, 234, 212, 0.2);
       }
 
+      .tab .tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        height: 16px;
+        margin-left: 6px;
+        padding: 0 4px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #062018;
+        font-size: 10px;
+        font-weight: 600;
+        vertical-align: middle;
+      }
+
       pre {
         margin: 0;
         border-radius: var(--radius);
@@ -458,6 +657,13 @@
         font-size: 12px;
         line-height: 1.5;
         font-family: "IBM Plex Mono", "SF Mono", monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      pre.empty {
+        color: var(--text-muted);
+        font-style: italic;
       }
 
       .log-pane {
@@ -466,6 +672,12 @@
 
       .log-pane.active {
         display: block;
+      }
+
+      .pane-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 8px;
       }
 
       /* ── Advanced (collapsed) ── */
@@ -517,17 +729,12 @@
           flex-direction: column;
         }
 
-        .step-desc {
-          display: none;
-        }
-
         .btn-row {
           flex-direction: column;
         }
 
         .btn-row button {
           width: 100%;
-          text-align: center;
         }
       }
     </style>
@@ -538,7 +745,7 @@
         <div class="hero-top">
           <h1>Telemetry Playground</h1>
           <div class="hero-controls">
-            <div id="connection-chip" class="chip">
+            <div id="connection-chip" class="chip" role="status">
               <span class="dot"></span>
               <span>Connecting…</span>
             </div>
@@ -549,12 +756,12 @@
         </div>
         <p class="tagline">
           Generate, transform, and export OpenTelemetry data without wiring a
-          full stack first.
+          full stack first. Follow the four steps below in order.
         </p>
       </section>
 
-      <details class="guide" open>
-        <summary>How to run</summary>
+      <details class="guide">
+        <summary>How to run &amp; setup guide</summary>
         <div class="guide-body">
           <div class="guide-step">
             <span class="guide-num">1</span>
@@ -614,14 +821,19 @@
         </div>
       </details>
 
-      <div class="status-strip" id="status"></div>
+      <div
+        class="status-strip"
+        id="status"
+        role="status"
+        aria-label="System status"
+      ></div>
 
       <section class="pipeline">
-        <div class="step">
+        <div class="step active" id="step-1" data-step="1">
           <div class="step-head">
-            <span class="step-num">1</span>
+            <span class="step-num"><span class="num-label">1</span></span>
             <span class="step-title">Start the collector</span>
-            <span class="step-desc">Do this first — pick where data goes</span>
+            <span class="step-badge" id="step-1-badge">Start here</span>
           </div>
           <div class="btn-row">
             <button
@@ -630,6 +842,7 @@
               type="button"
             >
               Send to ClickHouse only
+              <span class="tag">Recommended</span>
             </button>
             <button data-action="collector-start-dual" type="button">
               Send to New Relic + ClickHouse
@@ -653,11 +866,11 @@
           </div>
         </div>
 
-        <div class="step">
+        <div class="step locked" id="step-2" data-step="2">
           <div class="step-head">
-            <span class="step-num">2</span>
+            <span class="step-num"><span class="num-label">2</span></span>
             <span class="step-title">Start the agent / generate telemetry</span>
-            <span class="step-desc">Produces telemetry and sends it through the collector</span>
+            <span class="step-badge locked" id="step-2-badge">Locked</span>
           </div>
           <div class="btn-row">
             <button class="primary" data-action="run-synthetic" type="button">
@@ -673,18 +886,16 @@
               Stream GitHub events continuously → ClickHouse
             </button>
           </div>
-          <p class="step-hint">
-            The Anthropic and Gemini demos have no button here — run them from
-            the CLI with <code>.\scripts\run-anthropic.ps1</code> or
-            <code>.\scripts\run-gemini.ps1</code> while a collector is running.
+          <p class="step-hint" id="step-2-hint">
+            Start a collector in Step 1 to unlock these actions.
           </p>
         </div>
 
-        <div class="step">
+        <div class="step locked" id="step-3" data-step="3">
           <div class="step-head">
-            <span class="step-num">3</span>
-            <span class="step-title">Verify data in ClickHouse</span>
-            <span class="step-desc">Refresh to see rows land</span>
+            <span class="step-num"><span class="num-label">3</span></span>
+            <span class="step-title">Verify data landed</span>
+            <span class="step-badge locked" id="step-3-badge">Locked</span>
           </div>
           <div class="btn-row">
             <button
@@ -700,11 +911,11 @@
           </div>
         </div>
 
-        <div class="step">
+        <div class="step" id="step-4" data-step="4">
           <div class="step-head">
-            <span class="step-num">4</span>
+            <span class="step-num"><span class="num-label">4</span></span>
             <span class="step-title">Stop &amp; reset</span>
-            <span class="step-desc">When done experimenting</span>
+            <span class="step-badge" id="step-4-badge">Anytime</span>
           </div>
           <div class="btn-row">
             <button data-action="stop-pipeline" type="button">
@@ -720,7 +931,7 @@
         </div>
       </section>
 
-      <div id="result" class="result"></div>
+      <div id="result" class="result" role="status" aria-live="polite"></div>
 
       <section class="output-section">
         <div class="output-head">
@@ -729,40 +940,34 @@
             Clear
           </button>
         </div>
-        <div class="tab-bar" id="tab-bar">
-          <button class="tab active" data-tab="collector" type="button">
+        <div class="tab-bar" id="tab-bar" role="tablist">
+          <button class="tab active" data-tab="collector" type="button" role="tab">
             Collector
           </button>
-          <button class="tab" data-tab="synthetic" type="button">
+          <button class="tab" data-tab="synthetic" type="button" role="tab">
             Synthetic
           </button>
-          <button class="tab" data-tab="ingest" type="button">AI Ingest</button>
-          <button class="tab" data-tab="github" type="button">GitHub</button>
-          <button class="tab" data-tab="clickhouse" type="button">ClickHouse</button>
-          <button class="tab" data-tab="newrelic" type="button">
+          <button class="tab" data-tab="ingest" type="button" role="tab">AI Ingest</button>
+          <button class="tab" data-tab="github" type="button" role="tab">GitHub</button>
+          <button class="tab" data-tab="clickhouse" type="button" role="tab">ClickHouse</button>
+          <button class="tab" data-tab="newrelic" type="button" role="tab">
             New Relic
           </button>
         </div>
-        <div class="log-pane active" data-pane="collector">
-          <pre id="collector-logs">(no logs)</pre>
+        <div class="log-pane active" data-pane="collector" role="tabpanel">
+          <pre id="collector-logs" class="empty">Collector logs will appear here once you start a collector in Step 1.</pre>
         </div>
-        <div class="log-pane" data-pane="synthetic">
-          <pre id="synthetic-logs">(no logs)</pre>
+        <div class="log-pane" data-pane="synthetic" role="tabpanel">
+          <pre id="synthetic-logs" class="empty">Run “Generate sample traces” in Step 2 to see synthetic agent output here.</pre>
         </div>
-        <div class="log-pane" data-pane="ingest">
-          <pre id="ingest-logs">(no logs)</pre>
+        <div class="log-pane" data-pane="ingest" role="tabpanel">
+          <pre id="ingest-logs" class="empty">Run “Send AI-shaped sample payload” in Step 2 to see the Gemini-generated telemetry plan here.</pre>
         </div>
-        <div class="log-pane" data-pane="github">
-          <pre id="github-poll-logs">(no logs)</pre>
+        <div class="log-pane" data-pane="github" role="tabpanel">
+          <pre id="github-poll-logs" class="empty">Run a GitHub button in Step 2 to see the poller stream events here.</pre>
         </div>
-        <div class="log-pane" data-pane="clickhouse">
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              margin-bottom: 8px;
-            "
-          >
+        <div class="log-pane" data-pane="clickhouse" role="tabpanel">
+          <div class="pane-toolbar">
             <button
               class="ghost"
               data-action="refresh-clickhouse"
@@ -771,16 +976,10 @@
               Refresh
             </button>
           </div>
-          <pre id="clickhouse-data">(not loaded — run a GitHub → ClickHouse button in Step 2, or click Refresh)</pre>
+          <pre id="clickhouse-data" class="empty">No query yet. Run a GitHub → ClickHouse button in Step 2, or click Refresh to count rows in otel.otel_traces.</pre>
         </div>
-        <div class="log-pane" data-pane="newrelic">
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              margin-bottom: 8px;
-            "
-          >
+        <div class="log-pane" data-pane="newrelic" role="tabpanel">
+          <div class="pane-toolbar">
             <button
               class="ghost"
               data-action="refresh-newrelic"
@@ -789,13 +988,14 @@
               Refresh
             </button>
           </div>
-          <pre id="newrelic-data">(not loaded — start collector in New Relic mode, then refresh)</pre>
+          <pre id="newrelic-data" class="empty">No query yet. Start the collector in a New Relic mode, then click Refresh.</pre>
         </div>
       </section>
 
       <details class="advanced">
         <summary>Advanced — API base URL</summary>
         <div class="advanced-body">
+          <label class="visually-hidden" for="api-base">API base URL</label>
           <input id="api-base" type="text" placeholder="http://127.0.0.1:8000" />
           <button id="reconnect-btn" type="button">Reconnect</button>
         </div>
@@ -820,6 +1020,20 @@
       const tabs = [...document.querySelectorAll(".tab[data-tab]")];
       const panes = [...document.querySelectorAll(".log-pane[data-pane]")];
 
+      // Which collector-start action corresponds to each backend mode.
+      const MODE_TO_ACTION = {
+        clickhouse: "collector-start-clickhouse",
+        dual: "collector-start-dual",
+        newrelic: "collector-start-nr",
+        local: "collector-start-local",
+      };
+      const MODE_LABEL = {
+        clickhouse: "ClickHouse only",
+        dual: "New Relic + ClickHouse",
+        newrelic: "New Relic only",
+        local: "Local debug",
+      };
+
       function detectApiBase() {
         if (window.location.protocol.startsWith("http")) {
           return window.location.origin;
@@ -832,6 +1046,8 @@
       let latestStatus = null;
       let backendConnected = false;
       let statusInterval = null;
+      let inFlight = false;
+      let lastTraceCount = null;
 
       function setConnection(ok, text) {
         backendConnected = ok;
@@ -843,54 +1059,202 @@
 
       function renderStatus(data) {
         latestStatus = data;
+        const s = data.signals || {};
+        const collectorMode = data.collector?.mode;
+        const collectorRunning = Boolean(data.collector?.running);
+
+        const collectorState = collectorRunning ? "on" : "off";
+        const collectorText = collectorRunning
+          ? `Collector · ${MODE_LABEL[collectorMode] || collectorMode || "on"}`
+          : "Collector · off";
+
         const items = [
+          { html: `<strong>${collectorText}</strong>`, state: collectorState },
           {
-            label: "Collector",
-            ok: data.collector.running,
-            detail: data.collector.mode || "off",
+            html: ":4318 " + (s.collector_listening_4318 ? "listening" : "closed"),
+            state: s.collector_listening_4318 ? "on" : "off",
           },
           {
-            label: ":4318",
-            ok: data.signals.collector_listening_4318,
+            html: "ClickHouse creds",
+            state: s.clickhouse_settings_set ? "on" : "off",
           },
           {
-            label: "Gemini",
-            ok: data.gemini_api_key_set,
+            html: "New Relic key",
+            state: s.new_relic_key_set ? "on" : "off",
           },
           {
-            label: "New Relic key",
-            ok: data.signals.new_relic_key_set,
+            html: "GitHub token",
+            state: s.github_token_set ? "on" : "off",
           },
           {
-            label: "ClickHouse",
-            ok: data.signals.clickhouse_settings_set,
-          },
-          {
-            label: "GitHub token",
-            ok: data.signals.github_token_set,
+            html: "Gemini key",
+            state: data.gemini_api_key_set ? "on" : "off",
           },
         ];
 
-        const jobName = data.job.name;
-        if (data.job.running && jobName) {
-          items.push({ label: `Job: ${jobName}`, ok: true });
+        if (data.job?.running && data.job?.name) {
+          items.push({
+            html: `Job running · ${data.job.name}`,
+            state: "warn",
+          });
         }
 
         statusNode.innerHTML = items
-          .map(
-            ({ label, ok, detail }) => `
-            <span class="status-item ${ok ? "ok" : ""}">
-              <span class="dot ${ok ? "ok" : ""}"></span>
-              ${label}${detail ? ` · ${detail}` : ""}
-            </span>
-          `
-          )
+          .map(({ html, state }) => {
+            const sym = state === "on" ? "●" : state === "warn" ? "◆" : "○";
+            const aria = state === "on" ? "active" : state === "warn" ? "busy" : "inactive";
+            return `<span class="status-item ${state}"><span class="sym" aria-hidden="true">${sym}</span>${html}<span class="visually-hidden"> (${aria})</span></span>`;
+          })
           .join("");
+
+        updateStepStates(data);
+        if (!inFlight) applyGating(data);
+      }
+
+      function setStep(stepNum, state, badgeText) {
+        const step = document.getElementById(`step-${stepNum}`);
+        const badge = document.getElementById(`step-${stepNum}-badge`);
+        if (!step) return;
+        step.classList.remove("locked", "active", "done");
+        if (state) step.classList.add(state);
+        if (badge) {
+          badge.className = "step-badge" + (state ? ` ${state}` : "");
+          badge.textContent = badgeText;
+        }
+      }
+
+      function updateStepStates(data) {
+        const listening = Boolean(data.signals?.collector_listening_4318);
+        const collectorRunning = Boolean(data.collector?.running);
+
+        // Step 1 — collector.
+        if (collectorRunning) {
+          const modeLabel = MODE_LABEL[data.collector?.mode] || "running";
+          setStep(1, "done", modeLabel);
+        } else {
+          setStep(1, "active", "Start here");
+        }
+
+        // Step 2 & 3 unlock once the collector is listening on :4318.
+        if (listening) {
+          setStep(2, "active", "Ready");
+          setStep(3, "active", "Ready");
+          const hint = document.getElementById("step-2-hint");
+          if (hint) {
+            hint.textContent =
+              "Anthropic and Gemini demos have no button — run them from the CLI with .\\scripts\\run-anthropic.ps1 or .\\scripts\\run-gemini.ps1 while a collector is running.";
+          }
+        } else {
+          setStep(2, "locked", "Locked");
+          setStep(3, "locked", "Locked");
+          const hint = document.getElementById("step-2-hint");
+          if (hint) {
+            hint.textContent = "Start a collector in Step 1 to unlock these actions.";
+          }
+        }
+
+        // Highlight the active collector mode button.
+        const activeAction = collectorRunning
+          ? MODE_TO_ACTION[data.collector?.mode]
+          : null;
+        for (const button of actionButtons) {
+          if (button.dataset.action?.startsWith("collector-start-")) {
+            button.classList.toggle(
+              "mode-active",
+              button.dataset.action === activeAction
+            );
+          }
+        }
+      }
+
+      // Compute {disabled, title} for a given action from current status.
+      function gateFor(action, data) {
+        const s = data?.signals || {};
+        const listening = Boolean(s.collector_listening_4318);
+        const collectorRunning = Boolean(data?.collector?.running);
+        const busy = Boolean(data?.job?.running);
+        const ch = Boolean(s.clickhouse_settings_set);
+        const nr = Boolean(s.new_relic_key_set);
+        const gh = Boolean(s.github_token_set);
+        const gem = Boolean(data?.gemini_api_key_set);
+
+        // Step 4 controls and clear are always available.
+        if (
+          action === "stop-pipeline" ||
+          action === "stop-github" ||
+          action === "stop-all" ||
+          action === "clear-logs"
+        ) {
+          return { disabled: false };
+        }
+
+        // Step 1 collector controls.
+        if (action?.startsWith("collector-start-")) {
+          if (busy) return { disabled: true, title: "A job is running — stop it first" };
+          if (collectorRunning)
+            return { disabled: true, title: "Collector already running — stop it to switch modes" };
+          return { disabled: false };
+        }
+        if (action === "collector-stop") {
+          return collectorRunning
+            ? { disabled: false }
+            : { disabled: true, title: "No collector is running" };
+        }
+
+        // Step 2 generators require the collector listening on :4318.
+        if (action === "run-synthetic") {
+          if (!listening) return { disabled: true, title: "Start the collector first (Step 1)" };
+          if (busy) return { disabled: true, title: "A job is already running" };
+          return { disabled: false };
+        }
+        if (action === "run-ingest") {
+          if (!listening) return { disabled: true, title: "Start the collector first (Step 1)" };
+          if (busy) return { disabled: true, title: "A job is already running" };
+          if (!gem) return { disabled: true, title: "GEMINI_API_KEY is not configured" };
+          return { disabled: false };
+        }
+        if (
+          action === "run-github-clickhouse-test" ||
+          action === "run-github-clickhouse-live"
+        ) {
+          if (!listening) return { disabled: true, title: "Start the collector first (Step 1)" };
+          if (busy) return { disabled: true, title: "A job is already running" };
+          if (!ch) return { disabled: true, title: "ClickHouse is not configured" };
+          if (!gh) return { disabled: true, title: "GitHub token is not configured" };
+          if (!gem) return { disabled: true, title: "GEMINI_API_KEY is not configured" };
+          return { disabled: false };
+        }
+
+        // Step 3 verification — allowed whenever the query backend is configured.
+        if (action === "refresh-clickhouse") {
+          return ch
+            ? { disabled: false }
+            : { disabled: true, title: "ClickHouse query is not configured" };
+        }
+        if (action === "refresh-newrelic") {
+          return nr
+            ? { disabled: false }
+            : { disabled: true, title: "New Relic query is not configured" };
+        }
+
+        return { disabled: false };
+      }
+
+      function applyGating(data) {
+        if (!data) return;
+        for (const button of actionButtons) {
+          const { disabled, title } = gateFor(button.dataset.action, data);
+          button.disabled = disabled;
+          if (title) button.title = title;
+          else button.removeAttribute("title");
+        }
       }
 
       function setActiveTab(name) {
         for (const tab of tabs) {
-          tab.classList.toggle("active", tab.dataset.tab === name);
+          const active = tab.dataset.tab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", active ? "true" : "false");
         }
         for (const pane of panes) {
           pane.classList.toggle("active", pane.dataset.pane === name);
@@ -899,6 +1263,11 @@
 
       for (const tab of tabs) {
         tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
+      }
+
+      function setPre(node, text, isEmpty) {
+        node.textContent = text;
+        node.classList.toggle("empty", Boolean(isEmpty));
       }
 
       async function readJsonResponse(resp) {
@@ -941,27 +1310,65 @@
         ]);
 
         renderStatus(statusData);
-        collectorLogsNode.textContent =
-          (logsData.collector || []).join("\n") || "(no logs)";
-        syntheticLogsNode.textContent =
-          (logsData.synthetic || []).join("\n") || "(no logs)";
-        githubPollLogsNode.textContent =
-          (logsData.github_poll || []).join("\n") || "(no logs)";
-        ingestLogsNode.textContent =
-          (logsData.ingest || []).join("\n") || "(no logs)";
+        setPre(
+          collectorLogsNode,
+          (logsData.collector || []).join("\n") ||
+            "Collector logs will appear here once you start a collector in Step 1.",
+          !(logsData.collector || []).length
+        );
+        setPre(
+          syntheticLogsNode,
+          (logsData.synthetic || []).join("\n") ||
+            "Run “Generate sample traces” in Step 2 to see synthetic agent output here.",
+          !(logsData.synthetic || []).length
+        );
+        setPre(
+          githubPollLogsNode,
+          (logsData.github_poll || []).join("\n") ||
+            "Run a GitHub button in Step 2 to see the poller stream events here.",
+          !(logsData.github_poll || []).length
+        );
+        setPre(
+          ingestLogsNode,
+          (logsData.ingest || []).join("\n") ||
+            "Run “Send AI-shaped sample payload” in Step 2 to see the Gemini-generated telemetry plan here.",
+          !(logsData.ingest || []).length
+        );
         renderNewRelicOutput(logsData);
+      }
+
+      // Track ClickHouse row deltas so a run's impact is obvious.
+      function noteTraceCount(count) {
+        let delta = null;
+        if (typeof count === "number" && lastTraceCount !== null) {
+          delta = count - lastTraceCount;
+        }
+        if (typeof count === "number") lastTraceCount = count;
+        return delta;
       }
 
       async function refreshClickHouseSummary() {
         const data = await apiGet("/api/clickhouse/summary");
-        clickhouseDataNode.textContent = JSON.stringify(data, null, 2);
+        const count = data.trace_count;
+        const delta = noteTraceCount(count);
+        setPre(clickhouseDataNode, JSON.stringify(data, null, 2), false);
         clickhouseDataNode.dataset.source = "query";
         setActiveTab("clickhouse");
+        if (typeof count === "number") {
+          if (delta && delta > 0) {
+            showResult(
+              `${delta} new trace row${delta === 1 ? "" : "s"} landed — otel.otel_traces now has ${count}.`,
+              "success"
+            );
+          } else {
+            showResult(`ClickHouse otel.otel_traces has ${count} trace rows.`, "info");
+          }
+        }
       }
 
       async function refreshNewRelicSummary() {
         const data = await apiGet("/api/newrelic/summary");
-        newRelicDataNode.textContent = JSON.stringify(data, null, 2);
+        setPre(newRelicDataNode, JSON.stringify(data, null, 2), false);
         newRelicDataNode.dataset.source = "query";
         setActiveTab("newrelic");
       }
@@ -978,26 +1385,8 @@
         });
         if (!nrLines.length) return;
         if (newRelicDataNode.dataset.source === "query") return;
-        newRelicDataNode.textContent = nrLines.join("\n");
+        setPre(newRelicDataNode, nrLines.join("\n"), false);
         newRelicDataNode.dataset.source = "collector";
-      }
-
-      function setButtonsDisabled(disabled) {
-        for (const button of actionButtons) {
-          const action = button.dataset.action;
-          if (!disabled) {
-            button.disabled = false;
-            continue;
-          }
-          button.disabled =
-            action !== "collector-stop" &&
-            action !== "stop-github" &&
-            action !== "stop-pipeline" &&
-            action !== "stop-all" &&
-            action !== "clear-logs" &&
-            action !== "refresh-newrelic" &&
-            action !== "refresh-clickhouse";
-        }
       }
 
       function setApiBase(nextBase) {
@@ -1006,9 +1395,33 @@
         localStorage.setItem("otel_ui_api_base", apiBase);
       }
 
-      function showResult(text, isError = false) {
-        resultNode.textContent = text;
-        resultNode.classList.toggle("error", isError);
+      function showResult(text, kind = "info") {
+        const icon =
+          kind === "error" ? "✕" : kind === "success" ? "✓" : "…";
+        resultNode.className = `result show ${kind}`;
+        resultNode.innerHTML = `<span class="r-icon" aria-hidden="true">${icon}</span><span></span>`;
+        resultNode.querySelector("span:last-child").textContent = text;
+      }
+
+      // Per-button loading indicator; restores markup afterward.
+      function startButtonLoading(button) {
+        if (!button) return;
+        button.dataset.prevHtml = button.innerHTML;
+        button.classList.add("loading");
+        button.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>Working…</span>`;
+        button.setAttribute("aria-busy", "true");
+      }
+
+      function stopButtonLoading(button) {
+        if (!button || button.dataset.prevHtml === undefined) return;
+        button.innerHTML = button.dataset.prevHtml;
+        delete button.dataset.prevHtml;
+        button.classList.remove("loading");
+        button.removeAttribute("aria-busy");
+      }
+
+      function lockAllButtons() {
+        for (const button of actionButtons) button.disabled = true;
       }
 
       async function reconnect() {
@@ -1017,17 +1430,17 @@
         setConnection(false, "Connecting…");
         await refreshStatusAndLogs();
         setConnection(true, "Connected");
-        const busy = latestStatus?.job?.running;
-        setButtonsDisabled(Boolean(busy));
       }
 
-      async function runAction(action) {
+      async function runAction(action, button) {
         if (!backendConnected) {
-          showResult("Not connected — check that the server is running.", true);
+          showResult("Not connected — check that the server is running.", "error");
           return;
         }
-        showResult("Running…");
-        setButtonsDisabled(true);
+        inFlight = true;
+        startButtonLoading(button);
+        lockAllButtons();
+        showResult("Working…", "info");
         try {
           if (action === "collector-start-local") {
             await apiPost("/api/collector/start", { mode: "local" });
@@ -1067,20 +1480,26 @@
             setActiveTab("ingest");
           } else if (action === "run-github-clickhouse-test") {
             showResult(
-              "Running full test (collector + GitHub poll + ClickHouse query). This may take up to 2 minutes..."
+              "Running full test (collector + GitHub poll + ClickHouse query). This may take up to 2 minutes…",
+              "info"
             );
             const data = await apiPost("/api/pipelines/github-clickhouse-test");
-            clickhouseDataNode.textContent = JSON.stringify(data, null, 2);
+            const count = data.clickhouse?.trace_count;
+            const delta = noteTraceCount(count);
+            setPre(clickhouseDataNode, JSON.stringify(data, null, 2), false);
             clickhouseDataNode.dataset.source = "query";
             setActiveTab("clickhouse");
             const traces = data.clickhouse?.trace_count ?? "?";
             const githubTraces = data.clickhouse?.github_related_trace_count ?? "?";
+            const deltaText = delta && delta > 0 ? ` (+${delta} new)` : "";
             showResult(
-              `Done. ClickHouse traces: ${traces} (GitHub-related: ${githubTraces}). See ClickHouse tab.`
+              `Done. ClickHouse traces: ${traces}${deltaText} · GitHub-related: ${githubTraces}. See ClickHouse tab.`,
+              "success"
             );
           } else if (action === "run-github-clickhouse-live") {
             showResult(
-              "Starting live stream (auto-starting ClickHouse collector + GitHub poll)..."
+              "Starting live stream (auto-starting ClickHouse collector + GitHub poll)…",
+              "info"
             );
             const data = await apiPost(
               "/api/pipelines/github-clickhouse-live",
@@ -1090,7 +1509,8 @@
             showResult(
               `Live stream started for ${data.github_repo} — polling every ` +
                 `${data.interval_sec}s. New GitHub events flow to ClickHouse ` +
-                `automatically. Use "Stop live stream" to stop.`
+                `automatically. Use “Stop GitHub stream” to stop.`,
+              "success"
             );
           } else if (action === "stop-github") {
             try {
@@ -1110,15 +1530,38 @@
             await apiPost("/api/pipelines/stop");
           } else if (action === "stop-all") {
             await apiPost("/api/stop-all");
-            collectorLogsNode.textContent = "(no logs)";
-            syntheticLogsNode.textContent = "(no logs)";
-            githubPollLogsNode.textContent = "(no logs)";
-            ingestLogsNode.textContent = "(no logs)";
-            clickhouseDataNode.textContent =
-              "(not loaded — run a GitHub → ClickHouse button in Step 2, or click Refresh)";
+            lastTraceCount = null;
+            setPre(
+              collectorLogsNode,
+              "Collector logs will appear here once you start a collector in Step 1.",
+              true
+            );
+            setPre(
+              syntheticLogsNode,
+              "Run “Generate sample traces” in Step 2 to see synthetic agent output here.",
+              true
+            );
+            setPre(
+              githubPollLogsNode,
+              "Run a GitHub button in Step 2 to see the poller stream events here.",
+              true
+            );
+            setPre(
+              ingestLogsNode,
+              "Run “Send AI-shaped sample payload” in Step 2 to see the Gemini-generated telemetry plan here.",
+              true
+            );
+            setPre(
+              clickhouseDataNode,
+              "No query yet. Run a GitHub → ClickHouse button in Step 2, or click Refresh to count rows in otel.otel_traces.",
+              true
+            );
             clickhouseDataNode.dataset.source = "";
-            newRelicDataNode.textContent =
-              "(not loaded - start collector in New Relic mode, then refresh)";
+            setPre(
+              newRelicDataNode,
+              "No query yet. Start the collector in a New Relic mode, then click Refresh.",
+              true
+            );
             newRelicDataNode.dataset.source = "";
           } else if (action === "refresh-newrelic") {
             await refreshNewRelicSummary();
@@ -1126,76 +1569,102 @@
             await refreshClickHouseSummary();
           } else if (action === "clear-logs") {
             await apiPost("/api/logs/clear");
-            collectorLogsNode.textContent = "(no logs)";
-            syntheticLogsNode.textContent = "(no logs)";
-            githubPollLogsNode.textContent = "(no logs)";
-            ingestLogsNode.textContent = "(no logs)";
-            newRelicDataNode.textContent =
-              "(not loaded — start collector in New Relic mode, then refresh)";
+            setPre(
+              collectorLogsNode,
+              "Collector logs will appear here once you start a collector in Step 1.",
+              true
+            );
+            setPre(
+              syntheticLogsNode,
+              "Run “Generate sample traces” in Step 2 to see synthetic agent output here.",
+              true
+            );
+            setPre(
+              githubPollLogsNode,
+              "Run a GitHub button in Step 2 to see the poller stream events here.",
+              true
+            );
+            setPre(
+              ingestLogsNode,
+              "Run “Send AI-shaped sample payload” in Step 2 to see the Gemini-generated telemetry plan here.",
+              true
+            );
+            setPre(
+              newRelicDataNode,
+              "No query yet. Start the collector in a New Relic mode, then click Refresh.",
+              true
+            );
             newRelicDataNode.dataset.source = "";
           }
-          if (
-            action !== "run-github-clickhouse-test" &&
-            action !== "run-github-clickhouse-live"
-          ) {
-            showResult("Done.");
+          // These actions already publish a tailored success message above.
+          const selfReporting =
+            action === "run-github-clickhouse-test" ||
+            action === "run-github-clickhouse-live" ||
+            action === "refresh-clickhouse";
+          if (!selfReporting) {
+            showResult("Done.", "success");
           }
         } catch (err) {
           const text = String(err.message || err);
-          if (text.includes("currently running")) {
-            showResult(`Blocked — stop the active job first.`, true);
+          if (text.includes("currently running") || text.includes("already running")) {
+            showResult("Blocked — stop the active job first (Step 4).", "error");
           } else if (text.includes("429")) {
-            showResult("Gemini rate limit (429) — wait and retry.", true);
-          } else if (text.includes("not listening")) {
-            showResult("Start the collector first (Step 1).", true);
+            showResult("Gemini rate limit (429) — wait and retry.", "error");
+          } else if (text.includes("not listening") || text.includes(":4318")) {
+            showResult("Start the collector first (Step 1).", "error");
           } else if (text.includes("GEMINI_API_KEY")) {
-            showResult("Set GEMINI_API_KEY to use AI ingest.", true);
+            showResult("Set GEMINI_API_KEY to use AI ingest.", "error");
           } else if (text.includes("GitHub token")) {
-            showResult("Set GITHUB_TOKEN or create .github_token.", true);
+            showResult("Set GITHUB_TOKEN or create .github_token.", "error");
           } else if (text.includes("ClickHouse")) {
-            showResult(text, true);
+            showResult(text, "error");
           } else if (text.includes("New Relic query not configured")) {
             showResult(
               "Set NEW_RELIC_USER_API_KEY and NEW_RELIC_ACCOUNT_ID.",
-              true
+              "error"
             );
           } else {
-            showResult(text, true);
+            showResult(text, "error");
           }
         } finally {
+          stopButtonLoading(button);
+          inFlight = false;
           try {
             await refreshStatusAndLogs();
             setConnection(true, "Connected");
           } catch (err) {
             setConnection(false, "Disconnected");
-            showResult(`Connection lost: ${err.message}`, true);
+            showResult(`Connection lost: ${err.message}`, "error");
+            lockAllButtons();
           }
-          const busy = latestStatus?.job?.running;
-          setButtonsDisabled(Boolean(busy));
         }
       }
 
       for (const button of actionButtons) {
-        button.addEventListener("click", () => runAction(button.dataset.action));
+        button.addEventListener("click", () =>
+          runAction(button.dataset.action, button)
+        );
       }
 
       async function handleReconnectClick() {
         try {
           await reconnect();
           if (statusInterval !== null) clearInterval(statusInterval);
-          statusInterval = setInterval(async () => {
-            if (!backendConnected) return;
-            try {
-              await refreshStatusAndLogs();
-            } catch {
-              setConnection(false, "Disconnected");
-              setButtonsDisabled(true);
-            }
-          }, 2000);
+          statusInterval = setInterval(pollTick, 2000);
         } catch (err) {
-          showResult(`Connection failed: ${err.message}`, true);
+          showResult(`Connection failed: ${err.message}`, "error");
           setConnection(false, "Disconnected");
-          setButtonsDisabled(true);
+          lockAllButtons();
+        }
+      }
+
+      async function pollTick() {
+        if (!backendConnected || inFlight) return;
+        try {
+          await refreshStatusAndLogs();
+        } catch {
+          setConnection(false, "Disconnected");
+          lockAllButtons();
         }
       }
 
@@ -1205,22 +1674,14 @@
 
       async function boot() {
         setConnection(false, "Connecting…");
-        setButtonsDisabled(true);
+        lockAllButtons();
         try {
           await reconnect();
-          statusInterval = setInterval(async () => {
-            if (!backendConnected) return;
-            try {
-              await refreshStatusAndLogs();
-            } catch {
-              setConnection(false, "Disconnected");
-              setButtonsDisabled(true);
-            }
-          }, 2000);
+          statusInterval = setInterval(pollTick, 2000);
         } catch (err) {
           showResult(
             "Could not connect — run `python -m agent serve` then refresh.",
-            true
+            "error"
           );
           setConnection(false, "Disconnected");
         }
