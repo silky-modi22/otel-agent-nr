@@ -1,15 +1,20 @@
-opentelemetry-api>=1.27.0,<2
-opentelemetry-sdk>=1.27.0,<2
-opentelemetry-exporter-otlp-proto-http>=1.27.0,<2
-google-genai>=1.0.0,<2
+# The official google-genai OTel instrumentation requires opentelemetry-api ~=1.43;
+# keep the whole OTel stack aligned to that floor so the resolver stays consistent.
+opentelemetry-api>=1.43.0,<2
+opentelemetry-sdk>=1.43.0,<2
+opentelemetry-exporter-otlp-proto-http>=1.43.0,<2
+# google-genai (import google.genai) powers both `agent serve` and the Gemini demo.
+# >=1.32.0 is required by opentelemetry-instrumentation-google-genai.
+google-genai>=1.32.0,<2
 fastapi>=0.115.0,<1
 uvicorn[standard]>=0.32.0,<1
 pydantic>=2.9.0,<3
-# Server-side Gemini/Anthropic trace demos (examples/gemini_otel, examples/anthropic_otel).
-# google-generativeai is the CLASSIC SDK (import google.generativeai); it coexists
-# with google-genai above (import google.genai) — different top-level modules.
-google-generativeai>=0.8.0,<1
-opentelemetry-instrumentation-google-generativeai>=0.61.0,<1
+# Server-side Gemini trace demo (examples/gemini_otel): modern google-genai SDK +
+# the OFFICIAL OpenTelemetry GenAI instrumentation (gen_ai.* semconv spans),
+# replacing the deprecated Traceloop google-generativeai instrumentation that
+# stopped emitting spans.
+opentelemetry-instrumentation-google-genai>=1.0b1,<2
+# Server-side Anthropic trace demo (examples/anthropic_otel).
 anthropic>=0.40.0,<1
 opentelemetry-instrumentation-anthropic>=0.62.0,<1
 truststore>=0.9.0

@@ -1,17 +1,23 @@
 # Real Gemini traffic -> OpenTelemetry -> Collector -> New Relic + ClickHouse
 
-This example runs **one real** Google Gemini `generate_content` call instrumented with
-**`opentelemetry-instrumentation-google-generativeai`** (Traceloop) so spans and metrics follow
-**Gen AI** conventions, then exports **OTLP/HTTP** to the same collector the rest of this
-repo uses (default `http://localhost:4318`). The dual collector config forwards that data to
-**both New Relic and ClickHouse**.
+This example runs **one real** Google Gemini `generate_content` call instrumented with the
+**official** OpenTelemetry GenAI instrumentation **`opentelemetry-instrumentation-google-genai`**
+so spans and metrics follow **gen_ai.\*** semantic conventions, then exports **OTLP/HTTP** to the
+same collector the rest of this repo uses (default `http://localhost:4318`). The dual collector
+config forwards that data to **both New Relic and ClickHouse**.
 
 It is the Gemini counterpart of [`examples/anthropic_otel/`](../anthropic_otel/README.md) and
 [`examples/openai_otel/`](../openai_otel/README.md).
 
-> **SDK note:** the Traceloop instrumentation targets the **classic** `google-generativeai`
-> SDK (import `google.generativeai`), **not** the newer `google-genai` SDK. The example and
-> `requirements.txt` use `google-generativeai` to match.
+> **SDK note:** this example uses the **modern** `google-genai` SDK (import `google.genai`, the
+> same SDK `python -m agent serve` uses) together with the official
+> `opentelemetry-instrumentation-google-genai` instrumentation. It replaces the previously used
+> deprecated Traceloop `opentelemetry-instrumentation-google-generativeai` + classic
+> `google-generativeai` SDK, which had stopped emitting spans.
+>
+> For robustness the client **also** wraps the call in an explicit manual span
+> (`gemini.generate_content`) with model/latency/token attributes, so at least one trace row
+> lands even if auto-instrumentation emits nothing.
 
 ## Prerequisites
 
@@ -107,12 +113,13 @@ Allow **1-2 minutes** for data to appear.
 | `DEPLOYMENT_ENVIRONMENT`    | `dev`                       | `deployment.environment`         |
 | `GEMINI_EXAMPLE_MODEL`      | `gemini-2.5-flash`          | Gemini model id                  |
 | `GEMINI_EXAMPLE_PROMPT`     | (short OTel question)        | Prompt text                      |
-| `TRACELOOP_TRACE_CONTENT`   | `false`                     | Capture prompts/completions      |
+| `GEMINI_TRACE_CONTENT`      | `false`                     | Capture prompts/completions      |
 
 ## Privacy and message content
 
-**By default this example sets `TRACELOOP_TRACE_CONTENT=false`** so the Traceloop Google
-Generative AI instrumentation does **not** record prompts and completions to span attributes.
-Set `TRACELOOP_TRACE_CONTENT=true` to capture them - they will then flow to the collector,
-**New Relic**, and **ClickHouse** under your retention policy and may contain PII (see the
-[package docs](https://pypi.org/project/opentelemetry-instrumentation-google-generativeai/)).
+**By default this example sets `GEMINI_TRACE_CONTENT=false`** (mapped to the instrumentation's
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT`) so the Google GenAI
+instrumentation does **not** record prompts and completions to span attributes.
+Set `GEMINI_TRACE_CONTENT=true` (mapped to `SPAN_ONLY`) to capture them - they will then flow to
+the collector, **New Relic**, and **ClickHouse** under your retention policy and may contain PII
+(see the [package docs](https://pypi.org/project/opentelemetry-instrumentation-google-genai/)).

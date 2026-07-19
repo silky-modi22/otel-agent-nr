@@ -76,6 +76,18 @@ To observe **real Anthropic (Claude) Python SDK** calls, use OpenTelemetry’s *
 
 **Privacy:** the Traceloop Anthropic instrumentation captures prompts/completions by default; set `TRACELOOP_TRACE_CONTENT=false` to disable. See the example README.
 
+### Real Gemini traffic → Collector → New Relic + ClickHouse
+
+To observe **real Google Gemini Python SDK** calls (not the Gemini-shaped `/ingest` demo), use OpenTelemetry’s **official Google GenAI instrumentation** (`opentelemetry-instrumentation-google-genai`) and the same OTLP collector, then dual-export to **New Relic and ClickHouse**.
+
+1. **Dual collector:** follow **[docs/clickhouse-collector-checklist.md](docs/clickhouse-collector-checklist.md)** (copy `collector-config-dual.yaml`, set `NEW_RELIC_LICENSE_KEY` + `CLICKHOUSE_*`, then `.\scripts\run-collector-dual.ps1` on Windows or `./scripts/run-collector-dual.sh`).
+2. **Example app:** follow **[examples/gemini_otel/README.md](examples/gemini_otel/README.md)** — set `GEMINI_API_KEY`, then `.\scripts\run-gemini.ps1` (Windows) or install `examples/gemini_otel/requirements.txt` and run `python examples/gemini_otel/client.py`.
+3. **Verify:** `SELECT count() FROM otel.otel_traces WHERE ServiceName = 'gemini-otel-example'` in ClickHouse, and the `gemini-otel-example` service in New Relic.
+
+**SDK note:** this example uses the **modern** `google-genai` SDK (import `google.genai`, the same SDK used by `python -m agent serve`) with the official `opentelemetry-instrumentation-google-genai` instrumentation, plus an explicit manual `gemini.generate_content` span for robustness. It replaces the deprecated Traceloop `opentelemetry-instrumentation-google-generativeai` + classic `google-generativeai` SDK, which had stopped emitting spans.
+
+**Privacy:** the Google GenAI instrumentation can capture prompts/completions; the example sets `GEMINI_TRACE_CONTENT=false` by default, override to `true` to capture. See the example README.
+
 ### GitHub live events → ingest (demo)
 
 Poll a **public** repo’s activity feed and send each new event to `/ingest` (stdlib poller, no extra deps). Put your token in `export GITHUB_TOKEN=...` or a gitignored **`.github_token`** file in the repo root.

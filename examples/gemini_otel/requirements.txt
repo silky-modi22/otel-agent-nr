@@ -1,11 +1,15 @@
 # Optional venv: python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
-# Traceloop's google-generativeai instrumentation targets the CLASSIC google-generativeai
-# SDK (import `google.generativeai`), NOT the newer `google-genai` SDK.
-# Version stack matches the anthropic example (opentelemetry-api>=1.38, still <2).
-google-generativeai>=0.8.0,<1
+# Modern google-genai SDK (import `google.genai`) + the OFFICIAL OpenTelemetry
+# GenAI instrumentation (import
+# `opentelemetry.instrumentation.google_genai.GoogleGenAiSdkInstrumentor`),
+# which emits gen_ai.* semconv spans/metrics. Replaces the deprecated Traceloop
+# `opentelemetry-instrumentation-google-generativeai` + classic
+# `google-generativeai` SDK, which stopped emitting spans.
+google-genai>=1.32.0,<2
 # Uses the OS trust store (Windows) so corporate TLS proxies don't break HTTPS.
 truststore>=0.9.0
-opentelemetry-api>=1.38.0,<2
-opentelemetry-sdk>=1.38.0,<2
-opentelemetry-exporter-otlp-proto-http>=1.38.0,<2
-opentelemetry-instrumentation-google-generativeai>=0.61.0,<1
+# The instrumentation requires opentelemetry-api ~=1.43; keep the stack aligned.
+opentelemetry-api>=1.43.0,<2
+opentelemetry-sdk>=1.43.0,<2
+opentelemetry-exporter-otlp-proto-http>=1.43.0,<2
+opentelemetry-instrumentation-google-genai>=1.0b1,<2
