@@ -574,20 +574,27 @@
           <div class="guide-step">
             <span class="guide-num">4</span>
             <p class="guide-text">
-              <strong>GitHub to ClickHouse</strong> — click
-              <strong>Run GitHub to ClickHouse test</strong> for a one-shot run,
-              or <strong>Start live stream</strong> to keep polling your repo every
-              30s so new pushes/PRs/issues flow into ClickHouse automatically. Both
-              auto-start the ClickHouse collector. Refresh the ClickHouse tab to
-              verify rows in <code>otel.otel_traces</code>; use
-              <strong>Stop live stream</strong> to end it.
+              <strong>Step 1 — Start the collector.</strong> Pick a destination:
+              <strong>ClickHouse</strong>, <strong>NR + ClickHouse</strong>,
+              <strong>New Relic only</strong>, or <strong>Local only</strong> for
+              debug. The collector must be running before you start the agent.
             </p>
           </div>
           <div class="guide-step">
             <span class="guide-num">5</span>
             <p class="guide-text">
-              <strong>Other pipelines</strong> — synthetic agent, AI ingest sample,
-              or manual collector modes. Watch output in the panel at the bottom.
+              <strong>Step 2 — Start the agent.</strong> Choose a source: synthetic
+              agent, AI ingest sample, or GitHub (<strong>one-shot</strong>,
+              <strong>live stream</strong>, or <strong>poll</strong>). The GitHub
+              buttons auto-start the ClickHouse collector if it isn't running yet.
+            </p>
+          </div>
+          <div class="guide-step">
+            <span class="guide-num">6</span>
+            <p class="guide-text">
+              <strong>Step 3 — Verify.</strong> Refresh the ClickHouse tab to see
+              rows land in <code>otel.otel_traces</code>. Use
+              <strong>Step 4</strong> to stop the agent, live stream, or everything.
             </p>
           </div>
         </div>
@@ -598,52 +605,11 @@
       <section class="pipeline">
         <div class="step">
           <div class="step-head">
-            <span class="step-num">A</span>
-            <span class="step-title">GitHub to ClickHouse</span>
-            <span class="step-desc">One-shot test or continuous live stream</span>
-          </div>
-          <div class="btn-row">
-            <button
-              class="primary"
-              data-action="run-github-clickhouse-test"
-              type="button"
-            >
-              Run GitHub to ClickHouse test
-            </button>
-            <button
-              class="primary"
-              data-action="run-github-clickhouse-live"
-              type="button"
-            >
-              Start live stream
-            </button>
-            <button
-              class="ghost danger"
-              data-action="stop-github"
-              type="button"
-            >
-              Stop live stream
-            </button>
-            <button data-action="refresh-clickhouse" type="button">
-              Refresh ClickHouse
-            </button>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-head">
             <span class="step-num">1</span>
-            <span class="step-title">Start collector</span>
-            <span class="step-desc">Use ClickHouse or NR + ClickHouse for GitHub traffic</span>
+            <span class="step-title">Start the collector</span>
+            <span class="step-desc">Do this first — pick where data goes</span>
           </div>
           <div class="btn-row">
-            <button
-              id="step-connect-btn"
-              class="primary"
-              type="button"
-            >
-              Connect / Reconnect
-            </button>
             <button
               class="primary"
               data-action="collector-start-clickhouse"
@@ -654,18 +620,21 @@
             <button data-action="collector-start-dual" type="button">
               NR + ClickHouse
             </button>
-            <button data-action="collector-start-local" type="button">
-              Local (debug)
-            </button>
             <button data-action="collector-start-nr" type="button">
-              New Relic
+              New Relic only
+            </button>
+            <button data-action="collector-start-local" type="button">
+              Local only (debug)
             </button>
             <button
               class="ghost danger"
               data-action="collector-stop"
               type="button"
             >
-              Stop
+              Stop collector
+            </button>
+            <button id="step-connect-btn" class="ghost" type="button">
+              Reconnect
             </button>
           </div>
         </div>
@@ -673,8 +642,8 @@
         <div class="step">
           <div class="step-head">
             <span class="step-num">2</span>
-            <span class="step-title">Generate telemetry</span>
-            <span class="step-desc">Pick one pipeline</span>
+            <span class="step-title">Start the agent</span>
+            <span class="step-desc">Generates telemetry and sends it through the collector</span>
           </div>
           <div class="btn-row">
             <button class="primary" data-action="run-synthetic" type="button">
@@ -683,8 +652,14 @@
             <button data-action="run-ingest" type="button">
               AI ingest sample
             </button>
+            <button data-action="run-github-clickhouse-test" type="button">
+              GitHub → ClickHouse (one-shot)
+            </button>
+            <button data-action="run-github-clickhouse-live" type="button">
+              GitHub live stream
+            </button>
             <button data-action="run-github" type="button">
-              Start GitHub poll
+              GitHub poll
             </button>
           </div>
         </div>
@@ -692,15 +667,35 @@
         <div class="step">
           <div class="step-head">
             <span class="step-num">3</span>
+            <span class="step-title">Verify data in ClickHouse</span>
+            <span class="step-desc">Refresh to see rows land</span>
+          </div>
+          <div class="btn-row">
+            <button
+              class="primary"
+              data-action="refresh-clickhouse"
+              type="button"
+            >
+              Refresh ClickHouse
+            </button>
+            <button data-action="refresh-newrelic" type="button">
+              Refresh New Relic
+            </button>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-head">
+            <span class="step-num">4</span>
             <span class="step-title">Stop &amp; reset</span>
             <span class="step-desc">When done experimenting</span>
           </div>
           <div class="btn-row">
             <button data-action="stop-pipeline" type="button">
-              Stop active job
+              Stop agent job
             </button>
             <button data-action="stop-github" type="button">
-              Stop GitHub poll
+              Stop live stream / poll
             </button>
             <button class="danger" data-action="stop-all" type="button">
               Stop all &amp; clear logs
