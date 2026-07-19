@@ -279,6 +279,13 @@
         margin-left: auto;
       }
 
+      .step-hint {
+        margin: 12px 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--text-muted);
+      }
+
       .btn-row {
         display: flex;
         flex-wrap: wrap;
@@ -574,27 +581,34 @@
           <div class="guide-step">
             <span class="guide-num">4</span>
             <p class="guide-text">
-              <strong>Step 1 — Start the collector.</strong> Pick a destination:
-              <strong>ClickHouse</strong>, <strong>NR + ClickHouse</strong>,
-              <strong>New Relic only</strong>, or <strong>Local only</strong> for
-              debug. The collector must be running before you start the agent.
+              <strong>Step 1 — Start the collector.</strong> Pick where telemetry
+              goes: <strong>ClickHouse only</strong>,
+              <strong>New Relic + ClickHouse</strong>,
+              <strong>New Relic only</strong>, or
+              <strong>Local debug</strong> (prints to console, exports nothing).
+              The collector listens on <code>:4318</code> and must be running
+              before you start the agent.
             </p>
           </div>
           <div class="guide-step">
             <span class="guide-num">5</span>
             <p class="guide-text">
-              <strong>Step 2 — Start the agent.</strong> Choose a source: synthetic
-              agent, AI ingest sample, or GitHub (<strong>one-shot</strong>,
-              <strong>live stream</strong>, or <strong>poll</strong>). The GitHub
-              buttons auto-start the ClickHouse collector if it isn't running yet.
+              <strong>Step 2 — Start the agent.</strong> Choose what generates
+              telemetry: <strong>synthetic sample traces</strong>, an
+              <strong>AI-shaped sample payload</strong>,
+              <strong>fetch GitHub events once → ClickHouse</strong>, or
+              <strong>stream GitHub events continuously → ClickHouse</strong>. The
+              two GitHub buttons auto-start the ClickHouse collector if it isn't
+              running yet.
             </p>
           </div>
           <div class="guide-step">
             <span class="guide-num">6</span>
             <p class="guide-text">
               <strong>Step 3 — Verify.</strong> Refresh the ClickHouse tab to see
-              rows land in <code>otel.otel_traces</code>. Use
-              <strong>Step 4</strong> to stop the agent, live stream, or everything.
+              rows land in <code>otel.otel_traces</code>, or the New Relic tab for
+              NR modes. Use <strong>Step 4</strong> to stop the agent, the GitHub
+              stream, or everything at once.
             </p>
           </div>
         </div>
@@ -615,16 +629,16 @@
               data-action="collector-start-clickhouse"
               type="button"
             >
-              ClickHouse
+              Send to ClickHouse only
             </button>
             <button data-action="collector-start-dual" type="button">
-              NR + ClickHouse
+              Send to New Relic + ClickHouse
             </button>
             <button data-action="collector-start-nr" type="button">
-              New Relic only
+              Send to New Relic only
             </button>
             <button data-action="collector-start-local" type="button">
-              Local only (debug)
+              Local debug (console, no export)
             </button>
             <button
               class="ghost danger"
@@ -642,26 +656,28 @@
         <div class="step">
           <div class="step-head">
             <span class="step-num">2</span>
-            <span class="step-title">Start the agent</span>
-            <span class="step-desc">Generates telemetry and sends it through the collector</span>
+            <span class="step-title">Start the agent / generate telemetry</span>
+            <span class="step-desc">Produces telemetry and sends it through the collector</span>
           </div>
           <div class="btn-row">
             <button class="primary" data-action="run-synthetic" type="button">
-              Synthetic agent · 20s
+              Generate sample traces (synthetic, ~20s)
             </button>
             <button data-action="run-ingest" type="button">
-              AI ingest sample
+              Send AI-shaped sample payload
             </button>
             <button data-action="run-github-clickhouse-test" type="button">
-              GitHub → ClickHouse (one-shot)
+              Fetch GitHub events once → ClickHouse
             </button>
             <button data-action="run-github-clickhouse-live" type="button">
-              GitHub live stream
-            </button>
-            <button data-action="run-github" type="button">
-              GitHub poll
+              Stream GitHub events continuously → ClickHouse
             </button>
           </div>
+          <p class="step-hint">
+            The Anthropic and Gemini demos have no button here — run them from
+            the CLI with <code>.\scripts\run-anthropic.ps1</code> or
+            <code>.\scripts\run-gemini.ps1</code> while a collector is running.
+          </p>
         </div>
 
         <div class="step">
@@ -676,7 +692,7 @@
               data-action="refresh-clickhouse"
               type="button"
             >
-              Refresh ClickHouse
+              Refresh ClickHouse (otel.otel_traces)
             </button>
             <button data-action="refresh-newrelic" type="button">
               Refresh New Relic
@@ -692,13 +708,13 @@
           </div>
           <div class="btn-row">
             <button data-action="stop-pipeline" type="button">
-              Stop agent job
+              Stop agent / telemetry job
             </button>
             <button data-action="stop-github" type="button">
-              Stop live stream / poll
+              Stop GitHub stream
             </button>
             <button class="danger" data-action="stop-all" type="button">
-              Stop all &amp; clear logs
+              Stop everything &amp; clear logs
             </button>
           </div>
         </div>
@@ -755,7 +771,7 @@
               Refresh
             </button>
           </div>
-          <pre id="clickhouse-data">(not loaded - run GitHub to ClickHouse test or refresh)</pre>
+          <pre id="clickhouse-data">(not loaded — run a GitHub → ClickHouse button in Step 2, or click Refresh)</pre>
         </div>
         <div class="log-pane" data-pane="newrelic">
           <div
@@ -1076,12 +1092,6 @@
                 `${data.interval_sec}s. New GitHub events flow to ClickHouse ` +
                 `automatically. Use "Stop live stream" to stop.`
             );
-          } else if (action === "run-github") {
-            await apiPost("/api/pipelines/github-poll", {
-              once: false,
-              interval_sec: 30,
-            });
-            setActiveTab("github");
           } else if (action === "stop-github") {
             try {
               await apiPost("/api/pipelines/github-poll/stop");
@@ -1105,7 +1115,7 @@
             githubPollLogsNode.textContent = "(no logs)";
             ingestLogsNode.textContent = "(no logs)";
             clickhouseDataNode.textContent =
-              "(not loaded - run GitHub to ClickHouse test or refresh)";
+              "(not loaded — run a GitHub → ClickHouse button in Step 2, or click Refresh)";
             clickhouseDataNode.dataset.source = "";
             newRelicDataNode.textContent =
               "(not loaded - start collector in New Relic mode, then refresh)";
