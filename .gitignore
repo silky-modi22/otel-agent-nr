@@ -10,6 +10,7 @@
 .clickhouse_endpoint
 .clickhouse_user
 .clickhouse_password
+.anthropic_api_key
 
 .venv/
 examples/openai_otel/.venv/

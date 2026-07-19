@@ -66,6 +66,16 @@ To observe **real OpenAI Python SDK** calls (not synthetic spans and not the Gem
 
 **Privacy:** avoid enabling Gen AI **message content** capture unless you intend prompts/responses to be stored in NR; see the example README.
 
+### Real Anthropic traffic → Collector → New Relic + ClickHouse
+
+To observe **real Anthropic (Claude) Python SDK** calls, use OpenTelemetry’s **Anthropic instrumentation** and the same OTLP collector, then dual-export to **New Relic and ClickHouse**.
+
+1. **Dual collector:** follow **[docs/clickhouse-collector-checklist.md](docs/clickhouse-collector-checklist.md)** (copy `collector-config-dual.yaml`, set `NEW_RELIC_LICENSE_KEY` + `CLICKHOUSE_*`, then `.\scripts\run-collector-dual.ps1` on Windows or `./scripts/run-collector-dual.sh`).
+2. **Example app:** follow **[examples/anthropic_otel/README.md](examples/anthropic_otel/README.md)** — set `ANTHROPIC_API_KEY`, then `.\scripts\run-anthropic.ps1` (Windows) or install `examples/anthropic_otel/requirements.txt` and run `python examples/anthropic_otel/client.py`.
+3. **Verify:** `SELECT count() FROM otel.otel_traces WHERE ServiceName = 'anthropic-otel-example'` in ClickHouse, and the `anthropic-otel-example` service in New Relic.
+
+**Privacy:** the Traceloop Anthropic instrumentation captures prompts/completions by default; set `TRACELOOP_TRACE_CONTENT=false` to disable. See the example README.
+
 ### GitHub live events → ingest (demo)
 
 Poll a **public** repo’s activity feed and send each new event to `/ingest` (stdlib poller, no extra deps). Put your token in `export GITHUB_TOKEN=...` or a gitignored **`.github_token`** file in the repo root.

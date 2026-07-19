@@ -1,0 +1,9 @@
+# Optional venv: python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
+# Traceloop anthropic instrumentation requires opentelemetry-api>=1.38 (still <2, matches repo stack)
+anthropic>=0.40.0,<1
+# Uses the OS trust store (Windows) so corporate TLS proxies don't break HTTPS.
+truststore>=0.9.0
+opentelemetry-api>=1.38.0,<2
+opentelemetry-sdk>=1.38.0,<2
+opentelemetry-exporter-otlp-proto-http>=1.38.0,<2
+opentelemetry-instrumentation-anthropic>=0.62.0,<1
