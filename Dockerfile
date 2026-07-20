@@ -18,6 +18,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# tini is a minimal init that runs as PID 1 to reap zombie children and forward
+# signals. Without it, uvicorn runs as PID 1 and asyncio.create_subprocess_exec
+# (used to spawn the collector and pipeline jobs) hangs because there is no init
+# to handle SIGCHLD / reap children.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -38,4 +46,4 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV PORT=8000
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]

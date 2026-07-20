@@ -79,4 +79,15 @@ def run_serve() -> None:
 
     app = create_app()
     app.state._serve_args = args
-    uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")
+    # Use the stdlib asyncio event loop (not uvloop). asyncio's child watcher
+    # reaps subprocesses in a thread and does not depend on SIGCHLD reaching
+    # PID 1, so asyncio.create_subprocess_exec works reliably even when this
+    # process is PID 1 in a container. Belt-and-suspenders with tini in the
+    # Dockerfile.
+    uvicorn.run(
+        app,
+        host=args.http_host,
+        port=args.http_port,
+        log_level="info",
+        loop="asyncio",
+    )
