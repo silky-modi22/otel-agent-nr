@@ -7,10 +7,11 @@ import os
 import signal
 import socket
 import subprocess
+import threading
 import time
 from collections import deque
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 MAX_LOG_LINES = 200
 
@@ -62,18 +63,28 @@ def _resolve_anthropic_key(repo_root: Path) -> str | None:
 class ProcessManager:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
+        # Serializes async start/stop operations invoked from request handlers.
         self._lock = asyncio.Lock()
+        # Guards mutation of process state shared with watcher threads.
+        self._state_lock = threading.Lock()
 
-        self._collector_proc: asyncio.subprocess.Process | None = None
+        # Child processes are spawned with the synchronous subprocess.Popen API
+        # and reaped by a dedicated daemon thread. This avoids
+        # asyncio.create_subprocess_exec, which hangs when the server runs as
+        # (or near) PID 1 in a container and depends on event-loop child
+        # watchers / SIGCHLD handling.
+        self._collector_proc: subprocess.Popen[bytes] | None = None
         self._collector_mode: str | None = None
         self._collector_exit_code: int | None = None
-        self._collector_task: asyncio.Task[None] | None = None
+        self._collector_running: bool = False
+        self._collector_thread: threading.Thread | None = None
         self._collector_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
 
-        self._job_proc: asyncio.subprocess.Process | None = None
+        self._job_proc: subprocess.Popen[bytes] | None = None
         self._job_name: str | None = None
         self._job_exit_code: int | None = None
-        self._job_task: asyncio.Task[None] | None = None
+        self._job_running: bool = False
+        self._job_thread: threading.Thread | None = None
         self._job_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
         self._synthetic_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
         self._github_poll_logs: deque[str] = deque(maxlen=MAX_LOG_LINES)
@@ -174,41 +185,49 @@ class ProcessManager:
             return (self._job_logs, self._anthropic_logs)
         return (self._job_logs,)
 
-    async def _drain_output(
-        self, proc: asyncio.subprocess.Process, sinks: Sequence[deque[str]]
+    def _drain_output(
+        self, proc: subprocess.Popen[bytes], sinks: Sequence[deque[str]]
     ) -> None:
+        """Blocking read of the child's stdout; runs in a watcher thread."""
         stream = proc.stdout
         if stream is None:
             return
-        while True:
-            line = await stream.readline()
-            if not line:
-                break
-            self._append_to_sinks(
-                sinks, line.decode("utf-8", errors="replace")
-            )
+        for raw in iter(stream.readline, b""):
+            self._append_to_sinks(sinks, raw.decode("utf-8", errors="replace"))
 
-    async def _watch_collector(self, proc: asyncio.subprocess.Process) -> None:
-        await self._drain_output(proc, (self._collector_logs,))
-        code = await proc.wait()
-        async with self._lock:
+    def _watch_collector(self, proc: subprocess.Popen[bytes]) -> None:
+        self._drain_output(proc, (self._collector_logs,))
+        code = proc.wait()
+        with self._state_lock:
             if self._collector_proc is proc:
                 self._collector_exit_code = code
+                self._collector_running = False
                 self._collector_proc = None
                 self._collector_mode = None
-                self._collector_task = None
+                self._collector_thread = None
 
-    async def _watch_job(
-        self, proc: asyncio.subprocess.Process, sinks: Sequence[deque[str]]
+    def _watch_job(
+        self, proc: subprocess.Popen[bytes], sinks: Sequence[deque[str]]
     ) -> None:
-        await self._drain_output(proc, sinks)
-        code = await proc.wait()
-        async with self._lock:
+        self._drain_output(proc, sinks)
+        code = proc.wait()
+        with self._state_lock:
             if self._job_proc is proc:
                 self._job_exit_code = code
+                self._job_running = False
                 self._job_proc = None
                 self._job_name = None
-                self._job_task = None
+                self._job_thread = None
+
+    async def _await_predicate(
+        self, predicate: Callable[[], bool], timeout: float
+    ) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            await asyncio.sleep(0.1)
+        return predicate()
 
     async def start_collector(self, mode: str) -> dict[str, str]:
         if mode not in {"local", "newrelic", "dual", "clickhouse"}:
@@ -253,24 +272,26 @@ class ProcessManager:
             self._apply_clickhouse_env(env)
 
         async with self._lock:
-            if (
-                self._collector_proc is not None
-                and self._collector_proc.returncode is None
-            ):
+            if self._collector_running:
                 raise RuntimeError("Collector is already running.")
             self._collector_logs.clear()
             self._collector_exit_code = None
-            proc = await asyncio.create_subprocess_exec(
-                str(binary_path),
-                f"--config={config_rel}",
+            proc = subprocess.Popen(
+                [str(binary_path), f"--config={config_rel}"],
                 cwd=str(self.repo_root),
                 env=env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
             self._collector_proc = proc
             self._collector_mode = mode
-            self._collector_task = asyncio.create_task(self._watch_collector(proc))
+            self._collector_running = True
+            self._collector_thread = threading.Thread(
+                target=self._watch_collector,
+                args=(proc,),
+                daemon=True,
+            )
+            self._collector_thread.start()
             self._append_collector_log(
                 "Started collector in "
                 f"{mode} mode with {config_rel} (pid={proc.pid})"
@@ -293,27 +314,25 @@ class ProcessManager:
     async def wait_for_job(self, *, timeout_sec: float = 180.0) -> int | None:
         deadline = time.time() + timeout_sec
         while time.time() < deadline:
-            async with self._lock:
-                proc = self._job_proc
-                inline_name = self._job_name if proc is None else None
-            if proc is None and inline_name is None:
-                async with self._lock:
-                    return self._job_exit_code
-            if proc is not None and proc.returncode is not None:
-                return proc.returncode
+            if not self._job_running and self._job_name is None:
+                return self._job_exit_code
             await asyncio.sleep(0.25)
         raise RuntimeError("Timed out waiting for pipeline job to finish.")
 
     async def stop_collector(self) -> dict[str, str]:
         async with self._lock:
             proc = self._collector_proc
-        if proc is not None and proc.returncode is None:
+            running = self._collector_running
+        if proc is not None and running:
             proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            stopped = await self._await_predicate(
+                lambda: not self._collector_running, 5.0
+            )
+            if not stopped:
                 proc.kill()
-                await proc.wait()
+                await self._await_predicate(
+                    lambda: not self._collector_running, 5.0
+                )
             self._append_collector_log("Collector stopped.")
             return {"status": "stopped", "mode": "managed"}
 
@@ -332,7 +351,7 @@ class ProcessManager:
         env: dict[str, str] | None = None,
     ) -> dict[str, str]:
         async with self._lock:
-            if self._job_proc is not None and self._job_proc.returncode is None:
+            if self._job_running:
                 active = self._job_name or "unknown"
                 raise RuntimeError(
                     f"Another pipeline job is currently running: {active}."
@@ -349,16 +368,22 @@ class ProcessManager:
             run_env["PYTHONUNBUFFERED"] = "1"
             if env:
                 run_env.update(env)
-            proc = await asyncio.create_subprocess_exec(
-                *command,
+            proc = subprocess.Popen(
+                list(command),
                 cwd=str(self.repo_root),
                 env=run_env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
             self._job_proc = proc
             self._job_name = name
-            self._job_task = asyncio.create_task(self._watch_job(proc, sinks))
+            self._job_running = True
+            self._job_thread = threading.Thread(
+                target=self._watch_job,
+                args=(proc, sinks),
+                daemon=True,
+            )
+            self._job_thread.start()
             self._append_to_sinks(
                 sinks,
                 f"Started {name}: {' '.join(command)} (pid={proc.pid})"
@@ -369,18 +394,18 @@ class ProcessManager:
         async with self._lock:
             proc = self._job_proc
             name = self._job_name
-        if proc is None or proc.returncode is not None:
+            running = self._job_running
+        if proc is None or not running:
             raise RuntimeError("No running pipeline job to stop.")
         if expected_name and name != expected_name:
             raise RuntimeError(
                 f"Running job is '{name or 'unknown'}', not '{expected_name}'."
             )
         proc.terminate()
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
+        stopped = await self._await_predicate(lambda: not self._job_running, 5.0)
+        if not stopped:
             proc.kill()
-            await proc.wait()
+            await self._await_predicate(lambda: not self._job_running, 5.0)
         self._append_job_log(f"Stopped job: {name or 'unknown'}")
         return {"status": "stopped", "job": name or "unknown"}
 
@@ -437,7 +462,7 @@ class ProcessManager:
 
     async def begin_inline_job(self, name: str) -> None:
         async with self._lock:
-            if self._job_proc is not None and self._job_proc.returncode is None:
+            if self._job_running:
                 active = self._job_name or "unknown"
                 raise RuntimeError(
                     f"Another pipeline job is currently running: {active}."
@@ -470,26 +495,27 @@ class ProcessManager:
         self._append_to_sinks(sinks, line)
 
     def status(self) -> dict[str, object]:
-        collector_running = (
-            self._collector_proc is not None and self._collector_proc.returncode is None
-        )
-        job_running = self._job_proc is not None and self._job_proc.returncode is None
-        if not job_running and self._job_name is not None:
-            # Inline job is active.
-            job_running = True
+        collector_running = self._collector_running
+        job_running = self._job_running or self._job_name is not None
+        collector_proc = self._collector_proc
+        job_proc = self._job_proc
         return {
             "collector": {
                 "running": collector_running,
                 "mode": self._collector_mode,
-                "pid": self._collector_proc.pid if collector_running else None,
+                "pid": (
+                    collector_proc.pid
+                    if collector_running and collector_proc is not None
+                    else None
+                ),
                 "last_exit_code": self._collector_exit_code,
             },
             "job": {
                 "running": job_running,
                 "name": self._job_name,
                 "pid": (
-                    self._job_proc.pid
-                    if self._job_proc and self._job_proc.returncode is None
+                    job_proc.pid
+                    if self._job_running and job_proc is not None
                     else None
                 ),
                 "last_exit_code": self._job_exit_code,
