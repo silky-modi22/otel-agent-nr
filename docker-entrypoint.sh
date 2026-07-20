@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Some platforms (containerd) set an enormous RLIMIT_NOFILE; Python subprocess
+# spawn then hangs closing all inherited fds before exec(). Cap it so spawn is instant.
+ulimit -n 4096 || true
+
 # Bind the FastAPI server to the platform-provided port on all interfaces.
 export OTEL_AI_HTTP_HOST="0.0.0.0"
 export OTEL_AI_HTTP_PORT="${PORT:-8000}"

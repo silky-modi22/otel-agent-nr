@@ -282,6 +282,7 @@ class ProcessManager:
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                close_fds=False,
             )
             self._collector_proc = proc
             self._collector_mode = mode
@@ -374,6 +375,7 @@ class ProcessManager:
                 env=run_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                close_fds=False,
             )
             self._job_proc = proc
             self._job_name = name
